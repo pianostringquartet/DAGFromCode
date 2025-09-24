@@ -6,6 +6,21 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		ECAAAEDF2E8440FF00E73632 /* SwiftBasicFormat in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEDE2E8440FF00E73632 /* SwiftBasicFormat */; };
+		ECAAAEE12E8440FF00E73632 /* SwiftCompilerPlugin in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEE02E8440FF00E73632 /* SwiftCompilerPlugin */; };
+		ECAAAEE32E8440FF00E73632 /* SwiftDiagnostics in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEE22E8440FF00E73632 /* SwiftDiagnostics */; };
+		ECAAAEE52E8440FF00E73632 /* SwiftIDEUtils in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEE42E8440FF00E73632 /* SwiftIDEUtils */; };
+		ECAAAEE72E8440FF00E73632 /* SwiftIfConfig in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEE62E8440FF00E73632 /* SwiftIfConfig */; };
+		ECAAAEEA2E84411F00E73632 /* BitCollections in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEE92E84411F00E73632 /* BitCollections */; };
+		ECAAAEEC2E84411F00E73632 /* Collections in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEEB2E84411F00E73632 /* Collections */; };
+		ECAAAEEE2E84411F00E73632 /* DequeModule in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEED2E84411F00E73632 /* DequeModule */; };
+		ECAAAEF02E84411F00E73632 /* HashTreeCollections in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEEF2E84411F00E73632 /* HashTreeCollections */; };
+		ECAAAEF22E84411F00E73632 /* HeapModule in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEF12E84411F00E73632 /* HeapModule */; };
+		ECAAAEF42E84411F00E73632 /* OrderedCollections in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEF32E84411F00E73632 /* OrderedCollections */; };
+		ECAAAEF62E84411F00E73632 /* _RopeModule in Frameworks */ = {isa = PBXBuildFile; productRef = ECAAAEF52E84411F00E73632 /* _RopeModule */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		ECAAAEBF2E843F6400E73632 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +67,18 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ECAAAEF42E84411F00E73632 /* OrderedCollections in Frameworks */,
+				ECAAAEEC2E84411F00E73632 /* Collections in Frameworks */,
+				ECAAAEE32E8440FF00E73632 /* SwiftDiagnostics in Frameworks */,
+				ECAAAEE52E8440FF00E73632 /* SwiftIDEUtils in Frameworks */,
+				ECAAAEEA2E84411F00E73632 /* BitCollections in Frameworks */,
+				ECAAAEE72E8440FF00E73632 /* SwiftIfConfig in Frameworks */,
+				ECAAAEF62E84411F00E73632 /* _RopeModule in Frameworks */,
+				ECAAAEEE2E84411F00E73632 /* DequeModule in Frameworks */,
+				ECAAAEF22E84411F00E73632 /* HeapModule in Frameworks */,
+				ECAAAEF02E84411F00E73632 /* HashTreeCollections in Frameworks */,
+				ECAAAEE12E8440FF00E73632 /* SwiftCompilerPlugin in Frameworks */,
+				ECAAAEDF2E8440FF00E73632 /* SwiftBasicFormat in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +139,18 @@
 			);
 			name = DAGFromCode;
 			packageProductDependencies = (
+				ECAAAEDE2E8440FF00E73632 /* SwiftBasicFormat */,
+				ECAAAEE02E8440FF00E73632 /* SwiftCompilerPlugin */,
+				ECAAAEE22E8440FF00E73632 /* SwiftDiagnostics */,
+				ECAAAEE42E8440FF00E73632 /* SwiftIDEUtils */,
+				ECAAAEE62E8440FF00E73632 /* SwiftIfConfig */,
+				ECAAAEE92E84411F00E73632 /* BitCollections */,
+				ECAAAEEB2E84411F00E73632 /* Collections */,
+				ECAAAEED2E84411F00E73632 /* DequeModule */,
+				ECAAAEEF2E84411F00E73632 /* HashTreeCollections */,
+				ECAAAEF12E84411F00E73632 /* HeapModule */,
+				ECAAAEF32E84411F00E73632 /* OrderedCollections */,
+				ECAAAEF52E84411F00E73632 /* _RopeModule */,
 			);
 			productName = DAGFromCode;
 			productReference = ECAAAEB02E843F6100E73632 /* DAGFromCode.app */;
@@ -195,6 +234,10 @@
 			);
 			mainGroup = ECAAAEA72E843F6100E73632;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				ECAAAEDD2E8440FE00E73632 /* XCRemoteSwiftPackageReference "swift-syntax" */,
+				ECAAAEE82E84411F00E73632 /* XCRemoteSwiftPackageReference "swift-collections" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = ECAAAEB12E843F6100E73632 /* Products */;
 			projectDirPath = "";
@@ -416,10 +459,11 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = 2;
 				XROS_DEPLOYMENT_TARGET = 2.5;
 			};
 			name = Debug;
@@ -455,10 +499,11 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = 2;
 				XROS_DEPLOYMENT_TARGET = 2.5;
 			};
 			name = Release;
@@ -593,6 +638,88 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		ECAAAEDD2E8440FE00E73632 /* XCRemoteSwiftPackageReference "swift-syntax" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/swiftlang/swift-syntax.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 602.0.0;
+			};
+		};
+		ECAAAEE82E84411F00E73632 /* XCRemoteSwiftPackageReference "swift-collections" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-collections.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.2.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		ECAAAEDE2E8440FF00E73632 /* SwiftBasicFormat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEDD2E8440FE00E73632 /* XCRemoteSwiftPackageReference "swift-syntax" */;
+			productName = SwiftBasicFormat;
+		};
+		ECAAAEE02E8440FF00E73632 /* SwiftCompilerPlugin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEDD2E8440FE00E73632 /* XCRemoteSwiftPackageReference "swift-syntax" */;
+			productName = SwiftCompilerPlugin;
+		};
+		ECAAAEE22E8440FF00E73632 /* SwiftDiagnostics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEDD2E8440FE00E73632 /* XCRemoteSwiftPackageReference "swift-syntax" */;
+			productName = SwiftDiagnostics;
+		};
+		ECAAAEE42E8440FF00E73632 /* SwiftIDEUtils */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEDD2E8440FE00E73632 /* XCRemoteSwiftPackageReference "swift-syntax" */;
+			productName = SwiftIDEUtils;
+		};
+		ECAAAEE62E8440FF00E73632 /* SwiftIfConfig */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEDD2E8440FE00E73632 /* XCRemoteSwiftPackageReference "swift-syntax" */;
+			productName = SwiftIfConfig;
+		};
+		ECAAAEE92E84411F00E73632 /* BitCollections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEE82E84411F00E73632 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = BitCollections;
+		};
+		ECAAAEEB2E84411F00E73632 /* Collections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEE82E84411F00E73632 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = Collections;
+		};
+		ECAAAEED2E84411F00E73632 /* DequeModule */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEE82E84411F00E73632 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = DequeModule;
+		};
+		ECAAAEEF2E84411F00E73632 /* HashTreeCollections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEE82E84411F00E73632 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = HashTreeCollections;
+		};
+		ECAAAEF12E84411F00E73632 /* HeapModule */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEE82E84411F00E73632 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = HeapModule;
+		};
+		ECAAAEF32E84411F00E73632 /* OrderedCollections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEE82E84411F00E73632 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = OrderedCollections;
+		};
+		ECAAAEF52E84411F00E73632 /* _RopeModule */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ECAAAEE82E84411F00E73632 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = _RopeModule;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = ECAAAEA82E843F6100E73632 /* Project object */;
 }
