@@ -32,6 +32,31 @@ class DAGParser {
 
         print("✅ Successfully parsed source into ExprSyntax")
         print("📊 Expression type: \(type(of: expr))")
+        print("📋 Expression description: \(expr)")
+
+        // Try to identify what kind of expression this is
+        if let infixExpr = expr.as(InfixOperatorExprSyntax.self) {
+            print("🎯 This IS an InfixOperatorExprSyntax!")
+            print("   Left operand: \(infixExpr.leftOperand)")
+            print("   Operator: \(infixExpr.operator)")
+            print("   Right operand: \(infixExpr.rightOperand)")
+        } else {
+            print("❌ This is NOT an InfixOperatorExprSyntax")
+        }
+
+        if let sequenceExpr = expr.as(SequenceExprSyntax.self) {
+            print("🎯 This IS a SequenceExprSyntax!")
+            print("   Elements count: \(sequenceExpr.elements.count)")
+            for (index, element) in sequenceExpr.elements.enumerated() {
+                print("   Element \(index): \(type(of: element)) - \(element)")
+            }
+        }
+
+        // Debug: Show direct children of the expression
+        print("🌳 Expression children:")
+        for (index, child) in expr.children(viewMode: .sourceAccurate).enumerated() {
+            print("   Child \(index): \(type(of: child)) - \(child)")
+        }
 
         let visitor = DAGBuilderVisitor(viewMode: .sourceAccurate)
         print("🚶 Starting syntax tree walk...")
@@ -59,6 +84,117 @@ private class DAGBuilderVisitor: SyntaxVisitor {
 
     private func indent() -> String {
         String(repeating: "  ", count: depth)
+    }
+
+    // MARK: - Debug Visitors
+
+    override func visit(_ node: BinaryOperatorExprSyntax) -> SyntaxVisitorContinueKind {
+        print("\(indent())⚡ Visiting BinaryOperatorExprSyntax: \(node)")
+        // Binary operators are now handled at the SequenceExprSyntax level
+        return .visitChildren
+    }
+
+    override func visit(_ node: SequenceExprSyntax) -> SyntaxVisitorContinueKind {
+        print("\(indent())📋 Visiting SequenceExprSyntax: \(node)")
+        print("\(indent())   Elements count: \(node.elements.count)")
+        for (index, element) in node.elements.enumerated() {
+            print("\(indent())   Element \(index): \(type(of: element)) - \(element)")
+        }
+
+        // Handle binary operations (3 elements: left, operator, right)
+        if node.elements.count == 3 {
+            print("\(indent())🎯 Detected binary operation sequence")
+
+            // Walk the left operand first
+            let leftOperand = node.elements.first!
+            walk(leftOperand)
+
+            // Walk the right operand
+            let rightOperand = node.elements.last!
+            walk(rightOperand)
+
+            // Now we should have both operands on the stack
+            guard nodeStack.count >= 2 else {
+                print("\(indent())❌ Not enough operands on stack for binary operation: \(nodeStack.count)")
+                return .skipChildren
+            }
+
+            // Get the operator from the middle element
+            let elementsArray = Array(node.elements)
+            let operatorElement = elementsArray[1]
+            guard let binaryOpExpr = operatorElement.as(BinaryOperatorExprSyntax.self) else {
+                print("\(indent())❌ Middle element is not a BinaryOperatorExprSyntax: \(type(of: operatorElement))")
+                return .skipChildren
+            }
+
+            let operatorText = binaryOpExpr.operator.text
+            print("\(indent())🔣 Binary operator: '\(operatorText)'")
+
+            // Get operands from stack (right operand is on top)
+            let rightNodeId = nodeStack.removeLast()
+            let leftNodeId = nodeStack.removeLast()
+
+            print("\(indent())⚡ Processing binary operation: \(String(leftNodeId.uuidString.prefix(8))) \(operatorText) \(String(rightNodeId.uuidString.prefix(8)))")
+
+            // Determine the patch type
+            let patchKind: DAGPatch
+            switch operatorText {
+            case "+":
+                patchKind = .add
+            case "-":
+                patchKind = .subtract
+            default:
+                print("\(indent())❌ Unsupported binary operator: \(operatorText)")
+                return .skipChildren
+            }
+
+            // Create the binary operation node
+            let nodeId = UUID()
+            let leftInputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
+            let rightInputCoord = InputCoordinate(nodeId: nodeId, portId: 1)
+            let outputCoord = OutputCoordinate(nodeId: nodeId, portId: 0)
+
+            let leftUpstreamOutput = OutputCoordinate(nodeId: leftNodeId, portId: 0)
+            let rightUpstreamOutput = OutputCoordinate(nodeId: rightNodeId, portId: 0)
+
+            let leftInput = NodeInput(id: leftInputCoord, input: .incomingEdge(from: leftUpstreamOutput))
+            let rightInput = NodeInput(id: rightInputCoord, input: .incomingEdge(from: rightUpstreamOutput))
+            let output = NodeOutput(id: outputCoord, value: 0.0)
+
+            let dagNode = DAGNode(
+                nodeId: nodeId,
+                kind: patchKind,
+                inputs: [leftInput, rightInput],
+                output: output
+            )
+
+            nodes.append(dagNode)
+            print("\(indent())✅ Created binary DAGNode: \(patchKind) with ID: \(String(nodeId.uuidString.prefix(8)))")
+
+            // Add our node to stack
+            nodeStack.append(nodeId)
+
+            // Check if this should be the root node (if we're back to 1 item on stack)
+            if nodeStack.count == 1 {
+                rootNodeId = nodeId
+                print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8)))")
+            }
+
+            print("\(indent())📚 Final stack after binary operation: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
+
+            return .skipChildren // Don't visit children since we handled them manually
+        }
+
+        return .visitChildren
+    }
+
+    override func visit(_ node: TokenSyntax) -> SyntaxVisitorContinueKind {
+        // Check for operator tokens by matching the text
+        let operatorTokens = ["+", "-", "*", "/", "=", "==", "!=", "<", ">", "<=", ">="]
+        if operatorTokens.contains(node.text) {
+            print("\(indent())🔣 Visiting Operator Token: '\(node.text)' (kind: \(node.tokenKind))")
+        }
+        return .visitChildren
     }
 
     override func visit(_ node: FunctionCallExprSyntax) -> SyntaxVisitorContinueKind {
@@ -210,90 +346,6 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         return nodeId
     }
 
-    override func visit(_ node: InfixOperatorExprSyntax) -> SyntaxVisitorContinueKind {
-        print("\(indent())⚡ Visiting InfixOperatorExprSyntax")
-        print("\(indent())📝 Raw node: \(node)")
-        depth += 1
-
-        // InfixOperatorExprSyntax has: leftOperand, operatorOperand (as ExprSyntax), rightOperand
-        guard let binaryOp = node.operatorOperand.as(BinaryOperatorExprSyntax.self) else {
-            print("\(indent())⚠️ Operator is not a BinaryOperatorExprSyntax")
-            depth -= 1
-            return .visitChildren
-        }
-
-        let operatorText = binaryOp.operator.text
-        print("\(indent())🔣 Operator: '\(operatorText)'")
-
-        guard let patchKind = patchKind(from: operatorText) else {
-            print("\(indent())⚠️ Unknown operator: '\(operatorText)'")
-            depth -= 1
-            return .visitChildren
-        }
-
-        let nodeId = UUID()
-        print("\(indent())🆔 Created node ID: \(nodeId) for \(patchKind)")
-
-        print("\(indent())🔍 Walking left operand...")
-        walk(node.leftOperand)
-
-        guard let leftNodeId = nodeStack.last else {
-            print("\(indent())❌ No left operand found in stack!")
-            depth -= 1
-            return .skipChildren
-        }
-        print("\(indent())👈 Got left operand: \(String(leftNodeId.uuidString.prefix(8)))")
-
-        print("\(indent())🔍 Walking right operand...")
-        walk(node.rightOperand)
-
-        guard let rightNodeId = nodeStack.last else {
-            print("\(indent())❌ No right operand found in stack!")
-            depth -= 1
-            return .skipChildren
-        }
-        print("\(indent())👉 Got right operand: \(String(rightNodeId.uuidString.prefix(8)))")
-
-        // Remove both operands from stack
-        nodeStack.removeLast() // right operand
-        nodeStack.removeLast() // left operand
-
-        // Create binary operator node with two inputs
-        let leftInputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
-        let rightInputCoord = InputCoordinate(nodeId: nodeId, portId: 1)
-        let outputCoord = OutputCoordinate(nodeId: nodeId, portId: 0)
-
-        let leftUpstreamOutput = OutputCoordinate(nodeId: leftNodeId, portId: 0)
-        let rightUpstreamOutput = OutputCoordinate(nodeId: rightNodeId, portId: 0)
-
-        let leftInput = NodeInput(id: leftInputCoord, input: .incomingEdge(from: leftUpstreamOutput))
-        let rightInput = NodeInput(id: rightInputCoord, input: .incomingEdge(from: rightUpstreamOutput))
-        let output = NodeOutput(id: outputCoord, value: 0.0)
-
-        let dagNode = DAGNode(
-            nodeId: nodeId,
-            kind: patchKind,
-            inputs: [leftInput, rightInput],
-            output: output
-        )
-
-        nodes.append(dagNode)
-        print("\(indent())✅ Created binary DAGNode: \(patchKind) with ID: \(String(nodeId.uuidString.prefix(8)))")
-
-        // Add our node to stack
-        nodeStack.append(nodeId)
-
-        // Check if this should be the root node
-        if nodeStack.count == 1 {
-            rootNodeId = nodeId
-            print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8)))")
-        }
-
-        print("\(indent())📚 Final stack after infix operation: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
-
-        depth -= 1
-        return .skipChildren
-    }
 
     private func patchKind(from functionName: String) -> DAGPatch? {
         switch functionName {
