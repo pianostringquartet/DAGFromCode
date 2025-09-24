@@ -63,6 +63,8 @@ private class DAGBuilderVisitor: SyntaxVisitor {
 
     override func visit(_ node: FunctionCallExprSyntax) -> SyntaxVisitorContinueKind {
         print("\(indent())🔵 Visiting FunctionCallExprSyntax")
+        print("\(indent())📝 Raw node: \(node)")
+        print("\(indent())📊 Arguments count: \(node.arguments.count)")
         depth += 1
 
         guard let declRef = node.calledExpression.as(DeclReferenceExprSyntax.self) else {
@@ -82,14 +84,13 @@ private class DAGBuilderVisitor: SyntaxVisitor {
 
         let nodeId = UUID()
         print("\(indent())🆔 Created node ID: \(nodeId) for \(patchKind)")
-        nodeStack.append(nodeId)
-        print("\(indent())📚 Stack after push: \(nodeStack.count) items")
 
-        print("\(indent())🔍 Walking arguments...")
+        print("\(indent())🔍 Walking arguments first to get child nodes...")
+        print("\(indent())📚 Stack BEFORE walking args: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
+
         walk(node.arguments)
 
-        nodeStack.removeLast()
-        print("\(indent())📚 Stack after pop: \(nodeStack.count) items")
+        print("\(indent())📚 Stack AFTER walking args: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
 
         let inputCoord = InputCoordinate(nodeId: nodeId)
         let outputCoord = OutputCoordinate(nodeId: nodeId)
@@ -98,9 +99,13 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         if let childNodeId = nodeStack.last {
             let upstreamOutput = OutputCoordinate(nodeId: childNodeId)
             inputValue = .incomingEdge(from: upstreamOutput)
-            print("\(indent())🔗 Creating edge from upstream node: \(childNodeId)")
+            print("\(indent())🔗 Creating edge from upstream node: \(String(childNodeId.uuidString.prefix(8)))")
+
+            // Replace child with our function node on the stack
+            nodeStack[nodeStack.count - 1] = nodeId
+            print("\(indent())🔄 Replaced child \(String(childNodeId.uuidString.prefix(8))) with function node \(String(nodeId.uuidString.prefix(8)))")
         } else {
-            print("\(indent())❌ No child node found in stack!")
+            print("\(indent())❌ No child node found in stack! Stack is empty or has no elements.")
             depth -= 1
             return .skipChildren
         }
@@ -116,15 +121,15 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         )
 
         nodes.append(dagNode)
-        print("\(indent())✅ Created DAGNode: \(patchKind) with ID: \(nodeId)")
+        print("\(indent())✅ Created DAGNode: \(patchKind) with ID: \(String(nodeId.uuidString.prefix(8)))")
 
-        if nodeStack.isEmpty {
+        // Check if this should be the root node (stack should have exactly 1 item - our function node)
+        if nodeStack.count == 1 && nodeStack.first == nodeId {
             rootNodeId = nodeId
-            print("\(indent())👑 Set root node ID: \(nodeId)")
-        } else {
-            nodeStack[nodeStack.count - 1] = nodeId
-            print("\(indent())🔄 Replaced stack top with current node ID")
+            print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8)))")
         }
+
+        print("\(indent())📚 Final stack after function creation: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
 
         depth -= 1
         return .skipChildren
@@ -141,12 +146,17 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         let nodeId = createValueNode(value)
 
         if nodeStack.isEmpty {
+            // This is a standalone value (root of expression)
             rootNodeId = nodeId
-            print("\(indent())👑 Set root node ID: \(nodeId) (value node)")
+            nodeStack.append(nodeId)
+            print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8))) (standalone value)")
         } else {
-            nodeStack[nodeStack.count - 1] = nodeId
-            print("\(indent())🔄 Replaced stack top with value node ID: \(nodeId)")
+            // This value is an argument - just add it to the stack
+            nodeStack.append(nodeId)
+            print("\(indent())➕ Added value node to stack: \(String(nodeId.uuidString.prefix(8)))")
         }
+
+        print("\(indent())📚 Final stack after integer literal: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
 
         return .skipChildren
     }
@@ -162,19 +172,24 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         let nodeId = createValueNode(value)
 
         if nodeStack.isEmpty {
+            // This is a standalone value (root of expression)
             rootNodeId = nodeId
-            print("\(indent())👑 Set root node ID: \(nodeId) (value node)")
+            nodeStack.append(nodeId)
+            print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8))) (standalone value)")
         } else {
-            nodeStack[nodeStack.count - 1] = nodeId
-            print("\(indent())🔄 Replaced stack top with value node ID: \(nodeId)")
+            // This value is an argument - just add it to the stack
+            nodeStack.append(nodeId)
+            print("\(indent())➕ Added value node to stack: \(String(nodeId.uuidString.prefix(8)))")
         }
+
+        print("\(indent())📚 Final stack after float literal: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
 
         return .skipChildren
     }
 
     private func createValueNode(_ value: Double) -> UUID {
         let nodeId = UUID()
-        print("\(indent())💎 Creating ValueNode with value: \(value), ID: \(nodeId)")
+        print("\(indent())💎 Creating ValueNode with value: \(value), ID: \(String(nodeId.uuidString.prefix(8)))")
 
         let inputCoord = InputCoordinate(nodeId: nodeId)
         let outputCoord = OutputCoordinate(nodeId: nodeId)
