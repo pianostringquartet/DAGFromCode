@@ -223,7 +223,10 @@ struct DAGFromCodeTests {
     // MARK: - Variable Declaration Tests
 
     @Test func parseLetVariableDeclaration() throws {
-        let source = "let x = 16\ncos(sqrt(x))"
+        let source = """
+        let x = 16
+        cos(sqrt(x))
+        """
         let dag = DAGParser.parse(source)
 
         #expect(dag != nil)
@@ -235,7 +238,10 @@ struct DAGFromCodeTests {
     }
 
     @Test func parseVarVariableDeclaration() throws {
-        let source = "var x = 4\ncos(sqrt(x))"
+        let source = """
+        var x = 4
+        cos(sqrt(x))
+        """
         let dag = DAGParser.parse(source)
 
         #expect(dag != nil)
@@ -247,7 +253,10 @@ struct DAGFromCodeTests {
     }
 
     @Test func parseFloatVariableDeclaration() throws {
-        let source = "let x = 2.5\nsin(x)"
+        let source = """
+        let x = 2.5
+        sin(x)
+        """
         let dag = DAGParser.parse(source)
 
         #expect(dag != nil)
@@ -259,7 +268,10 @@ struct DAGFromCodeTests {
     }
 
     @Test func verifyVariableReferenceConnections() throws {
-        let source = "let x = 9\nsqrt(x)"
+        let source = """
+        let x = 9
+        sqrt(x)
+        """
         let dag = DAGParser.parse(source)
 
         #expect(dag != nil)
