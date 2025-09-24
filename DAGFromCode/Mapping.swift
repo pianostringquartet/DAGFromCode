@@ -14,12 +14,12 @@ import SwiftParser
 
 struct InputCoordinate: Equatable, Hashable {
     let nodeId: UUID
-    let portId: Int
+    let portId: Int = 0 // for now, every node only has a single input and a single output
 }
 
 struct OutputCoordinate: Equatable, Hashable {
     let nodeId: UUID
-    let portId: Int
+    let portId: Int = 0 // for now, every node only has a single input and a single output
 }
 
 struct NodeInput: Equatable, Hashable {
@@ -40,12 +40,12 @@ struct NodeOutput: Equatable, Hashable {
 
 struct DAGNode {
     let nodeId: UUID
-    let kind: NodePatch
+    let kind: DAGPatch
     let input: NodeInput // value or or incoming edge (from upstream output)
     let output: NodeOutput
 }
 
-enum NodePatch: String, Equatable, Codable, Hashable, Identifiable {
+enum DAGPatch: String, Equatable, Codable, Hashable, Identifiable {
     
     case value
     
