@@ -290,4 +290,118 @@ struct DAGFromCodeTests {
             }
         }
     }
+
+    // MARK: - Multiple Variable Declaration Tests
+
+    @Test func parseMultipleVariableDeclarations() throws {
+        let source = """
+        let x = 8
+        let y = 8
+        x + y
+        """
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 3) // x(8), y(8), +
+        #expect(dag?.description == "Add(ValueNode(8), ValueNode(8))")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .add)
+        #expect(rootNode?.inputs.count == 2)
+    }
+
+    @Test func parseMixedVariableDeclarations() throws {
+        let source = """
+        var a = 3
+        let b = 5
+        a - b
+        """
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 3) // a(3), b(5), -
+        #expect(dag?.description == "Subtract(ValueNode(3), ValueNode(5))")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .subtract)
+        #expect(rootNode?.inputs.count == 2)
+    }
+
+    @Test func parseMultipleVariablesDifferentValues() throws {
+        let source = """
+        let x = 10
+        let y = 20
+        x + y
+        """
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 3) // x(10), y(20), +
+        #expect(dag?.description == "Add(ValueNode(10), ValueNode(20))")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .add)
+    }
+
+    @Test func verifyMultipleVariableConnections() throws {
+        let source = """
+        let x = 8
+        let y = 8
+        x + y
+        """
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        guard let dag = dag else { return }
+
+        let addNode = dag.getRootNode()
+        #expect(addNode?.kind == .add)
+        #expect(addNode?.inputs.count == 2)
+
+        // Verify both inputs are from separate ValueNodes
+        guard let leftInput = addNode?.inputs.first,
+              case .incomingEdge(let leftFrom) = leftInput.input,
+              let rightInput = addNode?.inputs.last,
+              case .incomingEdge(let rightFrom) = rightInput.input else {
+            #expect(Bool(false), "Expected both inputs to be incoming edges")
+            return
+        }
+
+        // Find both value nodes
+        let leftValueNode = dag.nodes.first { $0.nodeId == leftFrom.nodeId }
+        let rightValueNode = dag.nodes.first { $0.nodeId == rightFrom.nodeId }
+
+        #expect(leftValueNode?.kind == .value)
+        #expect(rightValueNode?.kind == .value)
+
+        // Verify they are different node instances (separate ValueNodes)
+        #expect(leftValueNode?.nodeId != rightValueNode?.nodeId)
+
+        // Verify both have value 8
+        if let leftValueInput = leftValueNode?.inputs.first,
+           case .value(let leftVal) = leftValueInput.input {
+            #expect(leftVal == 8.0)
+        }
+
+        if let rightValueInput = rightValueNode?.inputs.first,
+           case .value(let rightVal) = rightValueInput.input {
+            #expect(rightVal == 8.0)
+        }
+    }
+
+    @Test func parseMultipleVariablesInNestedExpression() throws {
+        let source = """
+        let a = 4
+        let b = 9
+        sin(a + b)
+        """
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 4) // a(4), b(9), +, sin
+        #expect(dag?.description == "Add(ValueNode(4), ValueNode(9)) -> SinNode")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .sin)
+    }
 }
