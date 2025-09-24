@@ -383,6 +383,20 @@ extension DAG: CustomStringConvertible {
 
             print("\(indent)📍 Describing node: \(node.kind) (ID: \(nodeId))")
 
+            func describeUnaryFunction(name: String) -> String {
+                if let firstInput = node.inputs.first,
+                   case .incomingEdge(let from) = firstInput.input {
+                    print("\(indent)   Following edge to upstream: \(from.nodeId)")
+                    let upstream = describeNode(from.nodeId, visited: &visited, depth: depth + 1)
+                    if !upstream.isEmpty {
+                        let desc = "\(upstream) -> \(name)"
+                        print("\(indent)   -> \(desc)")
+                        return desc
+                    }
+                }
+                return name
+            }
+
             switch node.kind {
             case .value:
                 if let firstInput = node.inputs.first,
@@ -394,43 +408,13 @@ extension DAG: CustomStringConvertible {
                 return "ValueNode(?)"
 
             case .sin:
-                if let firstInput = node.inputs.first,
-                   case .incomingEdge(let from) = firstInput.input {
-                    print("\(indent)   Following edge to upstream: \(from.nodeId)")
-                    let upstream = describeNode(from.nodeId, visited: &visited, depth: depth + 1)
-                    if !upstream.isEmpty {
-                        let desc = "\(upstream) -> SinNode"
-                        print("\(indent)   -> \(desc)")
-                        return desc
-                    }
-                }
-                return "SinNode"
+                return describeUnaryFunction(name: "SinNode")
 
             case .cos:
-                if let firstInput = node.inputs.first,
-                   case .incomingEdge(let from) = firstInput.input {
-                    print("\(indent)   Following edge to upstream: \(from.nodeId)")
-                    let upstream = describeNode(from.nodeId, visited: &visited, depth: depth + 1)
-                    if !upstream.isEmpty {
-                        let desc = "\(upstream) -> CosNode"
-                        print("\(indent)   -> \(desc)")
-                        return desc
-                    }
-                }
-                return "CosNode"
+                return describeUnaryFunction(name: "CosNode")
 
             case .sqrt:
-                if let firstInput = node.inputs.first,
-                   case .incomingEdge(let from) = firstInput.input {
-                    print("\(indent)   Following edge to upstream: \(from.nodeId)")
-                    let upstream = describeNode(from.nodeId, visited: &visited, depth: depth + 1)
-                    if !upstream.isEmpty {
-                        let desc = "\(upstream) -> SquareRootNode"
-                        print("\(indent)   -> \(desc)")
-                        return desc
-                    }
-                }
-                return "SquareRootNode"
+                return describeUnaryFunction(name: "SquareRootNode")
 
             case .add:
                 if node.inputs.count >= 2 {
