@@ -24,13 +24,59 @@ class DAGParser {
         print("\n🔍 DAGParser.parse() starting with source: '\(source)'")
         let sourceFile = Parser.parse(source: source)
 
-        guard let firstStatement = sourceFile.statements.first,
-              let expr = firstStatement.item.as(ExprSyntax.self) else {
-            print("❌ Failed to extract expression from source")
-            return nil
+        print("📋 Found \(sourceFile.statements.count) statements in source file")
+
+        // Log each statement for debugging
+        for (index, statement) in sourceFile.statements.enumerated() {
+            print("📝 Statement \(index): \(type(of: statement.item)) - \(statement.item)")
         }
 
-        print("✅ Successfully parsed source into ExprSyntax")
+        let visitor = DAGBuilderVisitor(viewMode: .sourceAccurate)
+
+        // Process variable declarations first
+        var variableStatements: [CodeBlockItemSyntax] = []
+        var expressionStatement: CodeBlockItemSyntax?
+
+        for statement in sourceFile.statements {
+            if statement.item.is(VariableDeclSyntax.self) {
+                print("🎯 Statement is VariableDeclSyntax")
+                variableStatements.append(statement)
+            } else if statement.item.is(ExprSyntax.self) {
+                print("🎯 Statement is ExprSyntax")
+                expressionStatement = statement
+            } else {
+                print("⚠️ Unknown statement type: \(type(of: statement.item))")
+            }
+        }
+
+        // Process variable declarations first
+        if !variableStatements.isEmpty {
+            print("⏯ Processing \(variableStatements.count) variable declaration(s) first...")
+            for varStatement in variableStatements {
+                visitor.walk(varStatement)
+            }
+        }
+
+        // Process the final expression
+        let expr: ExprSyntax
+
+        if let exprStatement = expressionStatement,
+           let foundExpr = exprStatement.item.as(ExprSyntax.self) {
+            print("⏯ Now processing final expression...")
+            print("✅ Successfully parsed expression from multi-statement source")
+            expr = foundExpr
+        } else {
+            // Fallback: if no separate expression, try single statement as expression
+            guard let firstStatement = sourceFile.statements.first,
+                  let foundExpr = firstStatement.item.as(ExprSyntax.self) else {
+                print("❌ Failed to extract expression from source")
+                return nil
+            }
+
+            print("✅ Successfully parsed single statement as ExprSyntax")
+            expr = foundExpr
+        }
+
         print("📊 Expression type: \(type(of: expr))")
         print("📋 Expression description: \(expr)")
 
@@ -58,7 +104,6 @@ class DAGParser {
             print("   Child \(index): \(type(of: child)) - \(child)")
         }
 
-        let visitor = DAGBuilderVisitor(viewMode: .sourceAccurate)
         print("🚶 Starting syntax tree walk...")
         visitor.walk(expr)
 
@@ -81,9 +126,15 @@ private class DAGBuilderVisitor: SyntaxVisitor {
     var rootNodeId: UUID?
     private var nodeStack: [UUID] = []
     private var depth: Int = 0
+    private var variableValues: [String: Double] = [:]
 
     private func indent() -> String {
         String(repeating: "  ", count: depth)
+    }
+
+    private func logVariableTable() {
+        let entries = variableValues.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
+        print("\(indent())📚 Variable table now contains: [\(entries)]")
     }
 
     // MARK: - Debug Visitors
@@ -195,6 +246,105 @@ private class DAGBuilderVisitor: SyntaxVisitor {
             print("\(indent())🔣 Visiting Operator Token: '\(node.text)' (kind: \(node.tokenKind))")
         }
         return .visitChildren
+    }
+
+    override func visit(_ node: VariableDeclSyntax) -> SyntaxVisitorContinueKind {
+        print("\(indent())🔤 Visiting VariableDeclSyntax: \(node)")
+
+        // Log the binding specifier (let or var)
+        let bindingType = node.bindingSpecifier.text
+        print("\(indent())📌 Declaration type: \(bindingType)")
+
+        depth += 1
+
+        // Process each binding in the declaration
+        for (index, binding) in node.bindings.enumerated() {
+            print("\(indent())📊 Processing binding \(index): \(binding)")
+
+            // Extract variable name from pattern
+            if let identifierPattern = binding.pattern.as(IdentifierPatternSyntax.self) {
+                let variableName = identifierPattern.identifier.text
+                print("\(indent())📝 Variable name: '\(variableName)'")
+
+                // Extract initial value if present
+                if let initializer = binding.initializer {
+                    print("\(indent())🔍 Found initializer: \(initializer)")
+
+                    // Extract value from initializer
+                    if let literalExpr = initializer.value.as(IntegerLiteralExprSyntax.self) {
+                        if let value = Double(literalExpr.literal.text) {
+                            print("\(indent())💎 Integer literal value: \(value)")
+                            variableValues[variableName] = value
+                            print("\(indent())💾 Stored variable '\(variableName)' = \(value)")
+                            logVariableTable()
+                        } else {
+                            print("\(indent())❌ Failed to parse integer literal: '\(literalExpr.literal.text)'")
+                        }
+                    } else if let literalExpr = initializer.value.as(FloatLiteralExprSyntax.self) {
+                        if let value = Double(literalExpr.literal.text) {
+                            print("\(indent())💎 Float literal value: \(value)")
+                            variableValues[variableName] = value
+                            print("\(indent())💾 Stored variable '\(variableName)' = \(value)")
+                            logVariableTable()
+                        } else {
+                            print("\(indent())❌ Failed to parse float literal: '\(literalExpr.literal.text)'")
+                        }
+                    } else {
+                        print("\(indent())⚠️ Unsupported initializer type: \(type(of: initializer.value))")
+                    }
+                } else {
+                    print("\(indent())⚠️ Variable '\(variableName)' has no initializer")
+                }
+            } else {
+                print("\(indent())⚠️ Unsupported pattern type: \(type(of: binding.pattern))")
+            }
+        }
+
+        depth -= 1
+        return .skipChildren // Don't walk children since we processed them manually
+    }
+
+    override func visit(_ node: DeclReferenceExprSyntax) -> SyntaxVisitorContinueKind {
+        let referenceName = node.baseName.text
+        print("\(indent())🔗 Visiting DeclReferenceExprSyntax: '\(referenceName)'")
+
+        // Check if this is a variable reference (not a function name)
+        // We can distinguish by checking if it's being used as a function call's calledExpression
+        let isInFunctionCall = node.parent?.is(FunctionCallExprSyntax.self) == true
+
+        if !isInFunctionCall {
+            print("\(indent())🔍 Looking up variable '\(referenceName)' in table")
+
+            if let value = variableValues[referenceName] {
+                print("\(indent())✅ Found variable '\(referenceName)' = \(value)")
+                print("\(indent())🎯 Creating ValueNode for variable '\(referenceName)' with value \(value)")
+
+                // Create a ValueNode for this variable reference
+                let nodeId = createValueNode(value)
+
+                if nodeStack.isEmpty {
+                    // This is a standalone variable reference (root of expression)
+                    rootNodeId = nodeId
+                    nodeStack.append(nodeId)
+                    print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8))) (standalone variable)")
+                } else {
+                    // This variable reference is part of a larger expression
+                    nodeStack.append(nodeId)
+                    print("\(indent())➕ Added variable node to stack: \(String(nodeId.uuidString.prefix(8)))")
+                }
+
+                print("\(indent())📚 Final stack after variable reference: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
+
+                return .skipChildren
+            } else {
+                print("\(indent())❌ Variable '\(referenceName)' not found in table")
+                logVariableTable()
+                return .visitChildren
+            }
+        } else {
+            print("\(indent())🎯 This is a function name reference, not a variable")
+            return .visitChildren
+        }
     }
 
     override func visit(_ node: FunctionCallExprSyntax) -> SyntaxVisitorContinueKind {

@@ -219,4 +219,63 @@ struct DAGFromCodeTests {
             }
         }
     }
+
+    // MARK: - Variable Declaration Tests
+
+    @Test func parseLetVariableDeclaration() throws {
+        let source = "let x = 16\ncos(sqrt(x))"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 3) // 16, sqrt, cos
+        #expect(dag?.description == "ValueNode(16) -> SquareRootNode -> CosNode")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .cos)
+    }
+
+    @Test func parseVarVariableDeclaration() throws {
+        let source = "var x = 4\ncos(sqrt(x))"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 3) // 4, sqrt, cos
+        #expect(dag?.description == "ValueNode(4) -> SquareRootNode -> CosNode")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .cos)
+    }
+
+    @Test func parseFloatVariableDeclaration() throws {
+        let source = "let x = 2.5\nsin(x)"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 2) // 2.5, sin
+        #expect(dag?.description == "ValueNode(2) -> SinNode")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .sin)
+    }
+
+    @Test func verifyVariableReferenceConnections() throws {
+        let source = "let x = 9\nsqrt(x)"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        guard let dag = dag else { return }
+
+        let sqrtNode = dag.getRootNode()
+        #expect(sqrtNode?.kind == .sqrt)
+
+        if let sqrtInput = sqrtNode?.inputs.first,
+           case .incomingEdge(let from) = sqrtInput.input {
+            let valueNode = dag.nodes.first { $0.nodeId == from.nodeId }
+            #expect(valueNode?.kind == .value)
+            if let valueInput = valueNode?.inputs.first,
+               case .value(let val) = valueInput.input {
+                #expect(val == 9.0)
+            }
+        }
+    }
 }
