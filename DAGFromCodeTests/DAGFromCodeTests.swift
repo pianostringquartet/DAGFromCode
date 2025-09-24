@@ -404,4 +404,48 @@ struct DAGFromCodeTests {
         let rootNode = dag?.getRootNode()
         #expect(rootNode?.kind == .sin)
     }
+
+    // MARK: - Comparison Operator Tests
+
+    @Test func parseGreaterThan() throws {
+        let source = "5 > 3"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 3) // 5, 3, >
+        #expect(dag?.description == "GreaterThan(ValueNode(5), ValueNode(3))")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .greaterThan)
+        #expect(rootNode?.inputs.count == 2)
+    }
+
+    @Test func parseLessThan() throws {
+        let source = "2 < 10"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 3) // 2, 10, <
+        #expect(dag?.description == "LessThan(ValueNode(2), ValueNode(10))")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .lessThan)
+        #expect(rootNode?.inputs.count == 2)
+    }
+
+    @Test func parseEqual() throws {
+        let source = """
+        let x = 7
+        x == 5
+        """
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 3) // x(7), 5, ==
+        #expect(dag?.description == "Equal(ValueNode(7), ValueNode(5))")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .equal)
+        #expect(rootNode?.inputs.count == 2)
+    }
 }

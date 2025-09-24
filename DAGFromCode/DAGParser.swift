@@ -194,6 +194,12 @@ private class DAGBuilderVisitor: SyntaxVisitor {
                 patchKind = .add
             case "-":
                 patchKind = .subtract
+            case ">":
+                patchKind = .greaterThan
+            case "<":
+                patchKind = .lessThan
+            case "==":
+                patchKind = .equal
             default:
                 print("\(indent())❌ Unsupported binary operator: \(operatorText)")
                 return .skipChildren
@@ -504,6 +510,9 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         case "sqrt": return .sqrt
         case "+": return .add
         case "-": return .subtract
+        case ">": return .greaterThan
+        case "<": return .lessThan
+        case "==": return .equal
         default: return nil
         }
     }
@@ -603,6 +612,66 @@ extension DAG: CustomStringConvertible {
                     }
                 }
                 return "Subtract(?)"
+
+            case .greaterThan:
+                if node.inputs.count >= 2 {
+                    let leftInput = node.inputs[0]
+                    let rightInput = node.inputs[1]
+
+                    if case .incomingEdge(let leftFrom) = leftInput.input,
+                       case .incomingEdge(let rightFrom) = rightInput.input {
+                        let leftOperand = describeNode(leftFrom.nodeId, visited: &visited, depth: depth + 1)
+                        let rightOperand = describeNode(rightFrom.nodeId, visited: &visited, depth: depth + 1)
+
+                        if !leftOperand.isEmpty && !rightOperand.isEmpty {
+                            let desc = "GreaterThan(\(leftOperand), \(rightOperand))"
+                            print("\(indent)   -> \(desc)")
+                            return desc
+                        }
+                    }
+                }
+                return "GreaterThan(?)"
+
+            case .lessThan:
+                if node.inputs.count >= 2 {
+                    let leftInput = node.inputs[0]
+                    let rightInput = node.inputs[1]
+
+                    if case .incomingEdge(let leftFrom) = leftInput.input,
+                       case .incomingEdge(let rightFrom) = rightInput.input {
+                        let leftOperand = describeNode(leftFrom.nodeId, visited: &visited, depth: depth + 1)
+                        let rightOperand = describeNode(rightFrom.nodeId, visited: &visited, depth: depth + 1)
+
+                        if !leftOperand.isEmpty && !rightOperand.isEmpty {
+                            let desc = "LessThan(\(leftOperand), \(rightOperand))"
+                            print("\(indent)   -> \(desc)")
+                            return desc
+                        }
+                    }
+                }
+                return "LessThan(?)"
+
+            case .equal:
+                if node.inputs.count >= 2 {
+                    let leftInput = node.inputs[0]
+                    let rightInput = node.inputs[1]
+
+                    if case .incomingEdge(let leftFrom) = leftInput.input,
+                       case .incomingEdge(let rightFrom) = rightInput.input {
+                        let leftOperand = describeNode(leftFrom.nodeId, visited: &visited, depth: depth + 1)
+                        let rightOperand = describeNode(rightFrom.nodeId, visited: &visited, depth: depth + 1)
+
+                        if !leftOperand.isEmpty && !rightOperand.isEmpty {
+                            let desc = "Equal(\(leftOperand), \(rightOperand))"
+                            print("\(indent)   -> \(desc)")
+                            return desc
+                        }
+                    }
+                }
+                return "Equal(?)"
+
+            case .optionPicker:
+                return "OptionPicker(?)"
             }
         }
 

@@ -291,6 +291,18 @@ struct DAGDebugView: View {
 
         case .subtract:
             return "Subtract"
+
+        case .greaterThan:
+            return "GreaterThan"
+
+        case .lessThan:
+            return "LessThan"
+
+        case .equal:
+            return "Equal"
+
+        case .optionPicker:
+            return "OptionPicker"
         }
     }
 
@@ -383,8 +395,10 @@ struct DAGDebugView: View {
             return .blue
         case .sin, .cos, .sqrt:
             return .green
-        case .add, .subtract:
+        case .add, .subtract, .greaterThan, .lessThan, .equal:
             return .purple
+        case .optionPicker:
+            return .orange
         }
     }
 

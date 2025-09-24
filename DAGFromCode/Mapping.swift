@@ -54,7 +54,13 @@ enum DAGPatch: String, Equatable, Codable, Hashable, Identifiable {
     
     // infix operators
     case add, // i.e. `+`
-         subtract // i.e. `-`
+         subtract, // i.e. `-`
+         greaterThan, // i.e. `>`
+         lessThan, // i.e. `<`
+         equal // i.e. `==`
+    
+    // ternary expressions, if/else
+    case optionPicker
     
     var id: String {
         self.rawValue
