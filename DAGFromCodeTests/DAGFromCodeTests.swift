@@ -448,4 +448,109 @@ struct DAGFromCodeTests {
         #expect(rootNode?.kind == .equal)
         #expect(rootNode?.inputs.count == 2)
     }
+
+    // MARK: - Ternary Expression Tests
+
+    @Test func parseSimpleTernary() throws {
+        let source = "true ? 5 : 10"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 4) // true, 5, 10, ?:
+        #expect(dag?.description == "OptionPicker(ValueNode(1), ValueNode(10), ValueNode(5))")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .optionPicker)
+        #expect(rootNode?.inputs.count == 3)
+    }
+
+    @Test func parseComparisonTernary() throws {
+        let source = "5 > 4 ? 100 : 0"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 6) // 5, 4, >, 100, 0, ?:
+        #expect(dag?.description == "OptionPicker(GreaterThan(ValueNode(5), ValueNode(4)), ValueNode(0), ValueNode(100))")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .optionPicker)
+        #expect(rootNode?.inputs.count == 3)
+    }
+
+    @Test func parseVariableTernary() throws {
+        let source = """
+        let x = 8
+        let y = 12
+        x > y ? x : y
+        """
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 5) // x(8), y(12), >, ?:, and one additional value node
+        #expect(dag?.description == "OptionPicker(GreaterThan(ValueNode(8), ValueNode(12)), ValueNode(12), ValueNode(8))")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .optionPicker)
+        #expect(rootNode?.inputs.count == 3)
+    }
+
+    @Test func parseNestedTernary() throws {
+        let source = "true ? (false ? 1 : 2) : 3"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 6) // true, false, 1, 2, inner ?:, outer ?:
+        #expect(dag?.description == "OptionPicker(ValueNode(1), ValueNode(3), OptionPicker(ValueNode(0), ValueNode(2), ValueNode(1)))")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .optionPicker)
+        #expect(rootNode?.inputs.count == 3)
+    }
+
+    @Test func verifyTernaryConnections() throws {
+        let source = "true ? 5 : 10"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        guard let dag = dag else { return }
+
+        let ternaryNode = dag.getRootNode()
+        #expect(ternaryNode?.kind == .optionPicker)
+        #expect(ternaryNode?.inputs.count == 3)
+
+        // Verify condition input (port 0)
+        if let conditionInput = ternaryNode?.inputs.first,
+           case .incomingEdge(let conditionFrom) = conditionInput.input {
+            let conditionValueNode = dag.nodes.first { $0.nodeId == conditionFrom.nodeId }
+            #expect(conditionValueNode?.kind == .value)
+            if let valueInput = conditionValueNode?.inputs.first,
+               case .value(let val) = valueInput.input {
+                #expect(val == 1.0) // true = 1.0
+            }
+        }
+
+        // Verify false value input (port 1)
+        if ternaryNode?.inputs.count ?? 0 > 1,
+           let falseInput = ternaryNode?.inputs[1],
+           case .incomingEdge(let falseFrom) = falseInput.input {
+            let falseValueNode = dag.nodes.first { $0.nodeId == falseFrom.nodeId }
+            #expect(falseValueNode?.kind == .value)
+            if let valueInput = falseValueNode?.inputs.first,
+               case .value(let val) = valueInput.input {
+                #expect(val == 10.0)
+            }
+        }
+
+        // Verify true value input (port 2)
+        if ternaryNode?.inputs.count ?? 0 > 2,
+           let trueInput = ternaryNode?.inputs[2],
+           case .incomingEdge(let trueFrom) = trueInput.input {
+            let trueValueNode = dag.nodes.first { $0.nodeId == trueFrom.nodeId }
+            #expect(trueValueNode?.kind == .value)
+            if let valueInput = trueValueNode?.inputs.first,
+               case .value(let val) = valueInput.input {
+                #expect(val == 5.0)
+            }
+        }
+    }
 }

@@ -8,6 +8,7 @@
 import Foundation
 import SwiftSyntax
 import SwiftParser
+import SwiftOperators
 
 struct DAG {
     let nodes: [DAGNode]
@@ -104,8 +105,22 @@ class DAGParser {
             print("   Child \(index): \(type(of: child)) - \(child)")
         }
 
+        // Use SwiftOperators to fold flat sequences into proper tree structures
+        print("🔄 Folding expression tree using SwiftOperators...")
+        let foldedExpr: ExprSyntax
+        do {
+            foldedExpr = try OperatorTable.standardOperators.foldAll(expr).as(ExprSyntax.self)!
+            print("✅ Expression folded successfully")
+            print("📊 Folded expression type: \(type(of: foldedExpr))")
+            print("📋 Folded expression: \(foldedExpr)")
+        } catch {
+            print("❌ Failed to fold expression: \(error)")
+            print("⚠️ Falling back to original expression")
+            foldedExpr = expr
+        }
+
         print("🚶 Starting syntax tree walk...")
-        visitor.walk(expr)
+        visitor.walk(foldedExpr)
 
         if let rootNodeId = visitor.rootNodeId {
             let dag = DAG(nodes: visitor.nodes, rootNodeId: rootNodeId)
@@ -152,97 +167,90 @@ private class DAGBuilderVisitor: SyntaxVisitor {
             print("\(indent())   Element \(index): \(type(of: element)) - \(element)")
         }
 
-        // Handle binary operations (3 elements: left, operator, right)
-        if node.elements.count == 3 {
-            print("\(indent())🎯 Detected binary operation sequence")
-
-            // Walk the left operand first
-            let leftOperand = node.elements.first!
-            walk(leftOperand)
-
-            // Walk the right operand
-            let rightOperand = node.elements.last!
-            walk(rightOperand)
-
-            // Now we should have both operands on the stack
-            guard nodeStack.count >= 2 else {
-                print("\(indent())❌ Not enough operands on stack for binary operation: \(nodeStack.count)")
-                return .skipChildren
-            }
-
-            // Get the operator from the middle element
-            let elementsArray = Array(node.elements)
-            let operatorElement = elementsArray[1]
-            guard let binaryOpExpr = operatorElement.as(BinaryOperatorExprSyntax.self) else {
-                print("\(indent())❌ Middle element is not a BinaryOperatorExprSyntax: \(type(of: operatorElement))")
-                return .skipChildren
-            }
-
-            let operatorText = binaryOpExpr.operator.text
-            print("\(indent())🔣 Binary operator: '\(operatorText)'")
-
-            // Get operands from stack (right operand is on top)
-            let rightNodeId = nodeStack.removeLast()
-            let leftNodeId = nodeStack.removeLast()
-
-            print("\(indent())⚡ Processing binary operation: \(String(leftNodeId.uuidString.prefix(8))) \(operatorText) \(String(rightNodeId.uuidString.prefix(8)))")
-
-            // Determine the patch type
-            let patchKind: DAGPatch
-            switch operatorText {
-            case "+":
-                patchKind = .add
-            case "-":
-                patchKind = .subtract
-            case ">":
-                patchKind = .greaterThan
-            case "<":
-                patchKind = .lessThan
-            case "==":
-                patchKind = .equal
-            default:
-                print("\(indent())❌ Unsupported binary operator: \(operatorText)")
-                return .skipChildren
-            }
-
-            // Create the binary operation node
-            let nodeId = UUID()
-            let leftInputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
-            let rightInputCoord = InputCoordinate(nodeId: nodeId, portId: 1)
-            let outputCoord = OutputCoordinate(nodeId: nodeId, portId: 0)
-
-            let leftUpstreamOutput = OutputCoordinate(nodeId: leftNodeId, portId: 0)
-            let rightUpstreamOutput = OutputCoordinate(nodeId: rightNodeId, portId: 0)
-
-            let leftInput = NodeInput(id: leftInputCoord, input: .incomingEdge(from: leftUpstreamOutput))
-            let rightInput = NodeInput(id: rightInputCoord, input: .incomingEdge(from: rightUpstreamOutput))
-            let output = NodeOutput(id: outputCoord, value: 0.0)
-
-            let dagNode = DAGNode(
-                nodeId: nodeId,
-                kind: patchKind,
-                inputs: [leftInput, rightInput],
-                output: output
-            )
-
-            nodes.append(dagNode)
-            print("\(indent())✅ Created binary DAGNode: \(patchKind) with ID: \(String(nodeId.uuidString.prefix(8)))")
-
-            // Add our node to stack
-            nodeStack.append(nodeId)
-
-            // Check if this should be the root node (if we're back to 1 item on stack)
-            if nodeStack.count == 1 {
-                rootNodeId = nodeId
-                print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8)))")
-            }
-
-            print("\(indent())📚 Final stack after binary operation: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
-
-            return .skipChildren // Don't visit children since we handled them manually
-        }
+        // With SwiftOperators, most sequences should be folded into proper tree structures.
+        // This visitor now only handles true sequences that couldn't be folded.
+        print("\(indent())⚠️ Unfolded SequenceExprSyntax - processing as simple sequence")
 
         return .visitChildren
+    }
+
+    override func visit(_ node: InfixOperatorExprSyntax) -> SyntaxVisitorContinueKind {
+        print("\(indent())⚡ Visiting InfixOperatorExprSyntax: \(node)")
+
+        let operatorText = node.operator.trimmedDescription
+        print("\(indent())🔣 Binary operator: '\(operatorText)'")
+        print("\(indent())📍 Left operand: \(node.leftOperand)")
+        print("\(indent())📍 Right operand: \(node.rightOperand)")
+
+        // Walk operands first
+        walk(node.leftOperand)
+        walk(node.rightOperand)
+
+        // Now we should have both operands on the stack
+        guard nodeStack.count >= 2 else {
+            print("\(indent())❌ Not enough operands on stack for binary operation: \(nodeStack.count)")
+            return .skipChildren
+        }
+
+        // Get operands from stack (right operand is on top)
+        let rightNodeId = nodeStack.removeLast()
+        let leftNodeId = nodeStack.removeLast()
+
+        print("\(indent())⚡ Processing binary operation: \(String(leftNodeId.uuidString.prefix(8))) \(operatorText) \(String(rightNodeId.uuidString.prefix(8)))")
+
+        // Determine the patch type
+        let patchKind: DAGPatch
+        switch operatorText {
+        case "+":
+            patchKind = .add
+        case "-":
+            patchKind = .subtract
+        case ">":
+            patchKind = .greaterThan
+        case "<":
+            patchKind = .lessThan
+        case "==":
+            patchKind = .equal
+        default:
+            print("\(indent())❌ Unsupported binary operator: \(operatorText)")
+            return .skipChildren
+        }
+
+        // Create the binary operation node
+        let nodeId = UUID()
+        let leftInputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
+        let rightInputCoord = InputCoordinate(nodeId: nodeId, portId: 1)
+        let outputCoord = OutputCoordinate(nodeId: nodeId, portId: 0)
+
+        let leftUpstreamOutput = OutputCoordinate(nodeId: leftNodeId, portId: 0)
+        let rightUpstreamOutput = OutputCoordinate(nodeId: rightNodeId, portId: 0)
+
+        let leftInput = NodeInput(id: leftInputCoord, input: .incomingEdge(from: leftUpstreamOutput))
+        let rightInput = NodeInput(id: rightInputCoord, input: .incomingEdge(from: rightUpstreamOutput))
+        let output = NodeOutput(id: outputCoord, value: 0.0)
+
+        let dagNode = DAGNode(
+            nodeId: nodeId,
+            kind: patchKind,
+            inputs: [leftInput, rightInput],
+            output: output
+        )
+
+        nodes.append(dagNode)
+        print("\(indent())✅ Created binary DAGNode: \(patchKind) with ID: \(String(nodeId.uuidString.prefix(8)))")
+
+        // Add our node to stack
+        nodeStack.append(nodeId)
+
+        // Check if this should be the root node (if we're back to 1 item on stack)
+        if nodeStack.count == 1 {
+            rootNodeId = nodeId
+            print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8)))")
+        }
+
+        print("\(indent())📚 Final stack after binary operation: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
+
+        return .skipChildren // Don't visit children since we handled them manually
     }
 
     override func visit(_ node: TokenSyntax) -> SyntaxVisitorContinueKind {
@@ -479,6 +487,80 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         return .skipChildren
     }
 
+    override func visit(_ node: TernaryExprSyntax) -> SyntaxVisitorContinueKind {
+        print("\(indent())🔀 Visiting TernaryExprSyntax: \(node)")
+
+        // Walk the three parts in the order they'll be processed
+        // We need to process them so they end up on the stack in the right order for our OptionPicker
+
+        // First, walk the condition
+        print("\(indent())  🔍 Processing condition: \(node.conditionExpression)")
+        walk(node.conditionExpression)
+
+        // Then walk the false value (secondChoice)
+        print("\(indent())  ❌ Processing false value: \(node.secondChoice)")
+        walk(node.secondChoice)
+
+        // Finally walk the true value (firstChoice)
+        print("\(indent())  ✅ Processing true value: \(node.firstChoice)")
+        walk(node.firstChoice)
+
+        // Now we should have 3 items on the stack: [condition, falseValue, trueValue]
+        guard nodeStack.count >= 3 else {
+            print("\(indent())❌ Not enough operands for ternary operation. Stack size: \(nodeStack.count)")
+            return .skipChildren
+        }
+
+        // Pop the three values from stack (in reverse order since stack is LIFO)
+        let trueValueNodeId = nodeStack.removeLast()  // port 2
+        let falseValueNodeId = nodeStack.removeLast() // port 1
+        let conditionNodeId = nodeStack.removeLast()  // port 0
+
+        print("\(indent())⚡ Processing ternary operation: \(String(conditionNodeId.uuidString.prefix(8))) ? \(String(trueValueNodeId.uuidString.prefix(8))) : \(String(falseValueNodeId.uuidString.prefix(8)))")
+
+        // Create the OptionPicker node
+        let nodeId = UUID()
+        let conditionInputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
+        let falseInputCoord = InputCoordinate(nodeId: nodeId, portId: 1)
+        let trueInputCoord = InputCoordinate(nodeId: nodeId, portId: 2)
+
+        let conditionInput = NodeInput(
+            id: conditionInputCoord,
+            input: .incomingEdge(from: OutputCoordinate(nodeId: conditionNodeId, portId: 0))
+        )
+
+        let falseInput = NodeInput(
+            id: falseInputCoord,
+            input: .incomingEdge(from: OutputCoordinate(nodeId: falseValueNodeId, portId: 0))
+        )
+
+        let trueInput = NodeInput(
+            id: trueInputCoord,
+            input: .incomingEdge(from: OutputCoordinate(nodeId: trueValueNodeId, portId: 0))
+        )
+
+        let output = NodeOutput(id: OutputCoordinate(nodeId: nodeId, portId: 0), value: 0.0)
+
+        let dagNode = DAGNode(
+            nodeId: nodeId,
+            kind: .optionPicker,
+            inputs: [conditionInput, falseInput, trueInput],
+            output: output
+        )
+
+        nodes.append(dagNode)
+        print("\(indent())✅ Created OptionPicker DAGNode: \(String(nodeId.uuidString.prefix(8)))")
+
+        // Set as root and add to stack
+        rootNodeId = nodeId
+        nodeStack.append(nodeId)
+
+        print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8)))")
+        print("\(indent())📚 Final stack after ternary operation: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
+
+        return .skipChildren
+    }
+
     private func createValueNode(_ value: Double) -> UUID {
         let nodeId = UUID()
         print("\(indent())💎 Creating ValueNode with value: \(value), ID: \(String(nodeId.uuidString.prefix(8)))")
@@ -671,6 +753,25 @@ extension DAG: CustomStringConvertible {
                 return "Equal(?)"
 
             case .optionPicker:
+                if node.inputs.count >= 3 {
+                    let conditionInput = node.inputs[0]
+                    let falseInput = node.inputs[1]
+                    let trueInput = node.inputs[2]
+
+                    if case .incomingEdge(let conditionFrom) = conditionInput.input,
+                       case .incomingEdge(let falseFrom) = falseInput.input,
+                       case .incomingEdge(let trueFrom) = trueInput.input {
+                        let conditionOperand = describeNode(conditionFrom.nodeId, visited: &visited, depth: depth + 1)
+                        let falseOperand = describeNode(falseFrom.nodeId, visited: &visited, depth: depth + 1)
+                        let trueOperand = describeNode(trueFrom.nodeId, visited: &visited, depth: depth + 1)
+
+                        if !conditionOperand.isEmpty && !falseOperand.isEmpty && !trueOperand.isEmpty {
+                            let desc = "OptionPicker(\(conditionOperand), \(falseOperand), \(trueOperand))"
+                            print("\(indent)   -> \(desc)")
+                            return desc
+                        }
+                    }
+                }
                 return "OptionPicker(?)"
             }
         }
