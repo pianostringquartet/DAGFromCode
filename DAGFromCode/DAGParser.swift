@@ -92,12 +92,12 @@ private class DAGBuilderVisitor: SyntaxVisitor {
 
         print("\(indent())📚 Stack AFTER walking args: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
 
-        let inputCoord = InputCoordinate(nodeId: nodeId)
-        let outputCoord = OutputCoordinate(nodeId: nodeId)
+        let inputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
+        let outputCoord = OutputCoordinate(nodeId: nodeId, portId: 0)
 
         let inputValue: InputValue
         if let childNodeId = nodeStack.last {
-            let upstreamOutput = OutputCoordinate(nodeId: childNodeId)
+            let upstreamOutput = OutputCoordinate(nodeId: childNodeId, portId: 0)
             inputValue = .incomingEdge(from: upstreamOutput)
             print("\(indent())🔗 Creating edge from upstream node: \(String(childNodeId.uuidString.prefix(8)))")
 
@@ -116,7 +116,7 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         let dagNode = DAGNode(
             nodeId: nodeId,
             kind: patchKind,
-            input: input,
+            inputs: [input],
             output: output
         )
 
@@ -191,16 +191,17 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         let nodeId = UUID()
         print("\(indent())💎 Creating ValueNode with value: \(value), ID: \(String(nodeId.uuidString.prefix(8)))")
 
-        let inputCoord = InputCoordinate(nodeId: nodeId)
-        let outputCoord = OutputCoordinate(nodeId: nodeId)
+        let inputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
+        let outputCoord = OutputCoordinate(nodeId: nodeId, portId: 0)
 
         let input = NodeInput(id: inputCoord, input: .value(value))
         let output = NodeOutput(id: outputCoord, value: value)
 
+        // Value nodes have one input containing the static value
         let dagNode = DAGNode(
             nodeId: nodeId,
             kind: .value,
-            input: input,
+            inputs: [input],
             output: output
         )
 
@@ -209,11 +210,98 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         return nodeId
     }
 
+    override func visit(_ node: InfixOperatorExprSyntax) -> SyntaxVisitorContinueKind {
+        print("\(indent())⚡ Visiting InfixOperatorExprSyntax")
+        print("\(indent())📝 Raw node: \(node)")
+        depth += 1
+
+        // InfixOperatorExprSyntax has: leftOperand, operatorOperand (as ExprSyntax), rightOperand
+        guard let binaryOp = node.operatorOperand.as(BinaryOperatorExprSyntax.self) else {
+            print("\(indent())⚠️ Operator is not a BinaryOperatorExprSyntax")
+            depth -= 1
+            return .visitChildren
+        }
+
+        let operatorText = binaryOp.operator.text
+        print("\(indent())🔣 Operator: '\(operatorText)'")
+
+        guard let patchKind = patchKind(from: operatorText) else {
+            print("\(indent())⚠️ Unknown operator: '\(operatorText)'")
+            depth -= 1
+            return .visitChildren
+        }
+
+        let nodeId = UUID()
+        print("\(indent())🆔 Created node ID: \(nodeId) for \(patchKind)")
+
+        print("\(indent())🔍 Walking left operand...")
+        walk(node.leftOperand)
+
+        guard let leftNodeId = nodeStack.last else {
+            print("\(indent())❌ No left operand found in stack!")
+            depth -= 1
+            return .skipChildren
+        }
+        print("\(indent())👈 Got left operand: \(String(leftNodeId.uuidString.prefix(8)))")
+
+        print("\(indent())🔍 Walking right operand...")
+        walk(node.rightOperand)
+
+        guard let rightNodeId = nodeStack.last else {
+            print("\(indent())❌ No right operand found in stack!")
+            depth -= 1
+            return .skipChildren
+        }
+        print("\(indent())👉 Got right operand: \(String(rightNodeId.uuidString.prefix(8)))")
+
+        // Remove both operands from stack
+        nodeStack.removeLast() // right operand
+        nodeStack.removeLast() // left operand
+
+        // Create binary operator node with two inputs
+        let leftInputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
+        let rightInputCoord = InputCoordinate(nodeId: nodeId, portId: 1)
+        let outputCoord = OutputCoordinate(nodeId: nodeId, portId: 0)
+
+        let leftUpstreamOutput = OutputCoordinate(nodeId: leftNodeId, portId: 0)
+        let rightUpstreamOutput = OutputCoordinate(nodeId: rightNodeId, portId: 0)
+
+        let leftInput = NodeInput(id: leftInputCoord, input: .incomingEdge(from: leftUpstreamOutput))
+        let rightInput = NodeInput(id: rightInputCoord, input: .incomingEdge(from: rightUpstreamOutput))
+        let output = NodeOutput(id: outputCoord, value: 0.0)
+
+        let dagNode = DAGNode(
+            nodeId: nodeId,
+            kind: patchKind,
+            inputs: [leftInput, rightInput],
+            output: output
+        )
+
+        nodes.append(dagNode)
+        print("\(indent())✅ Created binary DAGNode: \(patchKind) with ID: \(String(nodeId.uuidString.prefix(8)))")
+
+        // Add our node to stack
+        nodeStack.append(nodeId)
+
+        // Check if this should be the root node
+        if nodeStack.count == 1 {
+            rootNodeId = nodeId
+            print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8)))")
+        }
+
+        print("\(indent())📚 Final stack after infix operation: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
+
+        depth -= 1
+        return .skipChildren
+    }
+
     private func patchKind(from functionName: String) -> DAGPatch? {
         switch functionName {
         case "sin": return .sin
         case "cos": return .cos
         case "sqrt": return .sqrt
+        case "+": return .add
+        case "-": return .subtract
         default: return nil
         }
     }
@@ -245,7 +333,8 @@ extension DAG: CustomStringConvertible {
 
             switch node.kind {
             case .value:
-                if case .value(let val) = node.input.input {
+                if let firstInput = node.inputs.first,
+                   case .value(let val) = firstInput.input {
                     let desc = "ValueNode(\(Int(val)))"
                     print("\(indent)   -> \(desc)")
                     return desc
@@ -253,7 +342,8 @@ extension DAG: CustomStringConvertible {
                 return "ValueNode(?)"
 
             case .sin:
-                if case .incomingEdge(let from) = node.input.input {
+                if let firstInput = node.inputs.first,
+                   case .incomingEdge(let from) = firstInput.input {
                     print("\(indent)   Following edge to upstream: \(from.nodeId)")
                     let upstream = describeNode(from.nodeId, visited: &visited, depth: depth + 1)
                     if !upstream.isEmpty {
@@ -265,7 +355,8 @@ extension DAG: CustomStringConvertible {
                 return "SinNode"
 
             case .cos:
-                if case .incomingEdge(let from) = node.input.input {
+                if let firstInput = node.inputs.first,
+                   case .incomingEdge(let from) = firstInput.input {
                     print("\(indent)   Following edge to upstream: \(from.nodeId)")
                     let upstream = describeNode(from.nodeId, visited: &visited, depth: depth + 1)
                     if !upstream.isEmpty {
@@ -277,7 +368,8 @@ extension DAG: CustomStringConvertible {
                 return "CosNode"
 
             case .sqrt:
-                if case .incomingEdge(let from) = node.input.input {
+                if let firstInput = node.inputs.first,
+                   case .incomingEdge(let from) = firstInput.input {
                     print("\(indent)   Following edge to upstream: \(from.nodeId)")
                     let upstream = describeNode(from.nodeId, visited: &visited, depth: depth + 1)
                     if !upstream.isEmpty {
@@ -287,6 +379,44 @@ extension DAG: CustomStringConvertible {
                     }
                 }
                 return "SquareRootNode"
+
+            case .add:
+                if node.inputs.count >= 2 {
+                    let leftInput = node.inputs[0]
+                    let rightInput = node.inputs[1]
+
+                    if case .incomingEdge(let leftFrom) = leftInput.input,
+                       case .incomingEdge(let rightFrom) = rightInput.input {
+                        let leftOperand = describeNode(leftFrom.nodeId, visited: &visited, depth: depth + 1)
+                        let rightOperand = describeNode(rightFrom.nodeId, visited: &visited, depth: depth + 1)
+
+                        if !leftOperand.isEmpty && !rightOperand.isEmpty {
+                            let desc = "Add(\(leftOperand), \(rightOperand))"
+                            print("\(indent)   -> \(desc)")
+                            return desc
+                        }
+                    }
+                }
+                return "Add(?)"
+
+            case .subtract:
+                if node.inputs.count >= 2 {
+                    let leftInput = node.inputs[0]
+                    let rightInput = node.inputs[1]
+
+                    if case .incomingEdge(let leftFrom) = leftInput.input,
+                       case .incomingEdge(let rightFrom) = rightInput.input {
+                        let leftOperand = describeNode(leftFrom.nodeId, visited: &visited, depth: depth + 1)
+                        let rightOperand = describeNode(rightFrom.nodeId, visited: &visited, depth: depth + 1)
+
+                        if !leftOperand.isEmpty && !rightOperand.isEmpty {
+                            let desc = "Subtract(\(leftOperand), \(rightOperand))"
+                            print("\(indent)   -> \(desc)")
+                            return desc
+                        }
+                    }
+                }
+                return "Subtract(?)"
             }
         }
 
