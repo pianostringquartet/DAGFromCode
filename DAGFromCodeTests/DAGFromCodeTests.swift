@@ -486,7 +486,7 @@ struct DAGFromCodeTests {
         let dag = DAGParser.parse(source)
 
         #expect(dag != nil)
-        #expect(dag?.nodes.count == 5) // x(8), y(12), >, ?:, and one additional value node
+        #expect(dag?.nodes.count == 6) // x(8), y(12), >, x(8), y(12), ?:
         #expect(dag?.description == "OptionPicker(GreaterThan(ValueNode(8), ValueNode(12)), ValueNode(12), ValueNode(8))")
 
         let rootNode = dag?.getRootNode()
@@ -499,7 +499,7 @@ struct DAGFromCodeTests {
         let dag = DAGParser.parse(source)
 
         #expect(dag != nil)
-        #expect(dag?.nodes.count == 6) // true, false, 1, 2, inner ?:, outer ?:
+        #expect(dag?.nodes.count == 7) // true, false, 1, 2, 3, inner ?:, outer ?:
         #expect(dag?.description == "OptionPicker(ValueNode(1), ValueNode(3), OptionPicker(ValueNode(0), ValueNode(2), ValueNode(1)))")
 
         let rootNode = dag?.getRootNode()

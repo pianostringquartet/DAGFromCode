@@ -487,6 +487,31 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         return .skipChildren
     }
 
+    override func visit(_ node: BooleanLiteralExprSyntax) -> SyntaxVisitorContinueKind {
+        print("\(indent())🔘 Visiting BooleanLiteralExprSyntax: '\(node.literal.text)'")
+
+        // Convert boolean to double: true -> 1.0, false -> 0.0
+        let value: Double = node.literal.text == "true" ? 1.0 : 0.0
+        print("\(indent())💎 Boolean literal value: \(value)")
+
+        let nodeId = createValueNode(value)
+
+        if nodeStack.isEmpty {
+            // This is a standalone boolean (root of expression)
+            rootNodeId = nodeId
+            nodeStack.append(nodeId)
+            print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8))) (standalone boolean)")
+        } else {
+            // This boolean is an argument - just add it to the stack
+            nodeStack.append(nodeId)
+            print("\(indent())➕ Added boolean node to stack: \(String(nodeId.uuidString.prefix(8)))")
+        }
+
+        print("\(indent())📚 Final stack after boolean literal: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
+
+        return .skipChildren
+    }
+
     override func visit(_ node: TernaryExprSyntax) -> SyntaxVisitorContinueKind {
         print("\(indent())🔀 Visiting TernaryExprSyntax: \(node)")
 
