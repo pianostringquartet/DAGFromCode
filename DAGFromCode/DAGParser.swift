@@ -284,7 +284,7 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         print("\(indent())⚡ Processing binary operation: \(String(leftNodeId.uuidString.prefix(8))) \(operatorText) \(String(rightNodeId.uuidString.prefix(8)))")
 
         // Determine the patch type
-        let patchKind: DAGPatch
+        let patchKind: DAGFunction
         switch operatorText {
         case "+":
             patchKind = .add
@@ -316,7 +316,7 @@ private class DAGBuilderVisitor: SyntaxVisitor {
 
         let dagNode = DAGNode(
             nodeId: nodeId,
-            kind: patchKind,
+            kind: .patch(patchKind),
             inputs: [leftInput, rightInput],
             output: output
         )
@@ -500,7 +500,7 @@ private class DAGBuilderVisitor: SyntaxVisitor {
 
         let dagNode = DAGNode(
             nodeId: nodeId,
-            kind: patchKind,
+            kind: .patch(patchKind),
             inputs: [input],
             output: output
         )
@@ -653,7 +653,7 @@ private class DAGBuilderVisitor: SyntaxVisitor {
 
         let dagNode = DAGNode(
             nodeId: nodeId,
-            kind: .optionPicker,
+            kind: .patch(.optionPicker),
             inputs: [conditionInput, falseInput, trueInput],
             output: output
         )
@@ -735,7 +735,7 @@ private class DAGBuilderVisitor: SyntaxVisitor {
 
         let dagNode = DAGNode(
             nodeId: nodeId,
-            kind: .optionPicker,
+            kind: .patch(.optionPicker),
             inputs: [conditionInput, falseInput, trueInput],
             output: output
         )
@@ -794,7 +794,7 @@ private class DAGBuilderVisitor: SyntaxVisitor {
 
         let dagNode = DAGNode(
             nodeId: nodeId,
-            kind: patchKind,
+            kind: .patch(patchKind),
             inputs: [input],
             output: output
         )
@@ -848,7 +848,7 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         // Value nodes have one input containing the static value
         let dagNode = DAGNode(
             nodeId: nodeId,
-            kind: .value,
+            kind: .patch(.value),
             inputs: [input],
             output: output
         )
@@ -859,7 +859,7 @@ private class DAGBuilderVisitor: SyntaxVisitor {
     }
 
 
-    private func patchKind(from functionName: String) -> DAGPatch? {
+    private func patchKind(from functionName: String) -> DAGFunction? {
         switch functionName {
         case "sin": return .sin
         case "cos": return .cos
@@ -873,7 +873,7 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         }
     }
 
-    private func methodPatchKind(from methodName: String) -> DAGPatch? {
+    private func methodPatchKind(from methodName: String) -> DAGFunction? {
         switch methodName {
         case "rounded": return .rounded
         case "magnitude": return .magnitude
@@ -921,7 +921,9 @@ extension DAG: CustomStringConvertible {
             }
 
             switch node.kind {
-            case .value:
+            case .patch(let patchKind):
+                switch patchKind {
+                case .value:
                 if let firstInput = node.inputs.first,
                    case .value(let val) = firstInput.input {
                     let desc = "ValueNode(\(Int(val)))"
@@ -1061,6 +1063,11 @@ extension DAG: CustomStringConvertible {
                     }
                 }
                 return "OptionPicker(?)"
+                }
+
+            case .layer(let layerKind):
+                // Handle layer nodes if needed in the future
+                return "Layer(\(layerKind))"
             }
         }
 

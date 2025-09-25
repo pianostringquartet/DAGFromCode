@@ -270,7 +270,9 @@ struct DAGDebugView: View {
 
     private func getNodeDisplayName(_ node: DAGNode) -> String {
         switch node.kind {
-        case .value:
+        case .patch(let patchKind):
+            switch patchKind {
+            case .value:
             if let input = node.inputs.first,
                case .value(let val) = input.input {
                 return "ValueNode(\(Int(val)))"
@@ -307,8 +309,11 @@ struct DAGDebugView: View {
         case .rounded:
             return "RoundedNode"
 
-        case .magnitude:
-            return "MagnitudeNode"
+            case .magnitude:
+                return "MagnitudeNode"
+            }
+        case .layer(let layerKind):
+            return "Layer(\(layerKind))"
         }
     }
 
@@ -374,7 +379,7 @@ struct DAGDebugView: View {
                         .foregroundColor(.secondary)
                     Text(nodeName)
                         .foregroundColor(nodeColor)
-                        .fontWeight(node.kind == .value ? .regular : .semibold)
+                        .fontWeight(node.kind == .patch(.value) ? .regular : .semibold)
                 }
                 .font(.system(.body, design: .monospaced))
 
@@ -397,14 +402,19 @@ struct DAGDebugView: View {
 
     private func getNodeColor(_ node: DAGNode) -> Color {
         switch node.kind {
-        case .value:
+        case .patch(let patchKind):
+            switch patchKind {
+            case .value:
             return .blue
         case .sin, .cos, .sqrt, .rounded, .magnitude:
             return .green
         case .add, .subtract, .greaterThan, .lessThan, .equal:
             return .purple
-        case .optionPicker:
-            return .orange
+            case .optionPicker:
+                return .orange
+            }
+        case .layer:
+            return .gray
         }
     }
 
@@ -476,7 +486,7 @@ struct DAGDebugView: View {
                         .foregroundColor(.secondary)
                     Text(nodeName)
                         .foregroundColor(nodeColor)
-                        .fontWeight(node.kind == .value ? .regular : .semibold)
+                        .fontWeight(node.kind == .patch(.value) ? .regular : .semibold)
                 }
                 .font(.system(.body, design: .monospaced))
 
@@ -583,7 +593,7 @@ struct DAGDebugView: View {
                             .foregroundColor(.secondary)
                         Text(getNodeDisplayName(node))
                             .foregroundColor(getNodeColor(node))
-                            .fontWeight(node.kind == .value ? .regular : .semibold)
+                            .fontWeight(node.kind == .patch(.value) ? .regular : .semibold)
                     }
                     .font(.system(.body, design: .monospaced))
                 }
