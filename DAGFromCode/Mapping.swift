@@ -15,10 +15,10 @@ import SwiftParser
 // A directed acyclic graph representing parsed Swift expressions
 struct DAG {
     let nodes: [UUID: DAGNodeType] // Dictionary for O(1) node lookups
-    let rootNodeId: UUID           // Explicit root node tracking
+    let resultNodeId: UUID          // The node representing the final expression result (may have incoming edges)
 
-    func getRootNode() -> DAGNodeType? {
-        return nodes[rootNodeId]
+    func getResultNode() -> DAGNodeType? {
+        return nodes[resultNodeId]
     }
 
     func getAllNodes() -> [DAGNodeType] {
