@@ -12,19 +12,26 @@ struct DAGFromCodeTests {
 
     @Test func parseSimpleValue() throws {
         let source = "4"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 1)
-        #expect(dag?.description == "ValueNode(4)")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 1)
+        #expect(projectData?.description == "ValueNode(4)")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.value))
-        if let firstInput = rootNode?.inputs.first,
-           case .value(let val) = firstInput.input {
-            #expect(val == 4.0)
-        } else {
-            Issue.record("Expected value input")
+        let rootNode = projectData?.graph.getRootNode()
+        switch rootNode {
+        case .function(let functionNode):
+            #expect(functionNode.patch == .value)
+            if let firstInput = functionNode.inputs.first,
+               case .value(let val) = firstInput.input {
+                #expect(val == 4.0)
+            } else {
+                Issue.record("Expected value input")
+            }
+        case .layerInput:
+            Issue.record("Expected function node, got layer input")
+        case nil:
+            Issue.record("Expected root node")
         }
     }
 

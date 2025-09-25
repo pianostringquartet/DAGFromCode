@@ -14,7 +14,7 @@ struct DAGDebugView: View {
     x + y
     """
 
-    @State private var parsedDAG: DAG?
+    @State private var parsedProjectData: ProjectData?
     @State private var parseError: String?
     @State private var isDebouncing = false
 
@@ -92,7 +92,7 @@ struct DAGDebugView: View {
                         Text("Parse Error")
                             .foregroundColor(.red)
                             .font(.caption)
-                    } else if parsedDAG != nil {
+                    } else if parsedProjectData != nil {
                         Image(systemName: "checkmark.circle")
                             .foregroundColor(.green)
                         Text("Parsed Successfully")
@@ -113,7 +113,8 @@ struct DAGDebugView: View {
                     .padding(.top)
 
                 ScrollView {
-                    if let dag = parsedDAG {
+                    if let projectData = parsedProjectData {
+                        let dag = projectData.graph
                         VStack(alignment: .leading, spacing: 4) {
                             // DAG info header
                             HStack {
@@ -122,7 +123,7 @@ struct DAGDebugView: View {
                                     .foregroundColor(.secondary)
                                 Spacer()
                                 if let rootNode = dag.getRootNode() {
-                                    Text("Root: \(getNodeDisplayName(rootNode))")
+                                    Text("Root: \(rootNode.displayName)")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
@@ -182,15 +183,15 @@ struct DAGDebugView: View {
 
     private func parseCode(_ code: String) {
         do {
-            if let dag = DAGParser.parse(code) {
-                parsedDAG = dag
+            if let projectData = ProjectDataParser.parse(code) {
+                parsedProjectData = projectData
                 parseError = nil
             } else {
-                parsedDAG = nil
+                parsedProjectData = nil
                 parseError = "Failed to parse code into DAG"
             }
         } catch {
-            parsedDAG = nil
+            parsedProjectData = nil
             parseError = error.localizedDescription
         }
     }
@@ -236,7 +237,7 @@ struct DAGDebugView: View {
             return prefix + (isLast ? "└─ " : "├─ ") + "[Cycle detected]\n"
         }
 
-        guard let node = dag.nodes.first(where: { $0.nodeId == nodeId }) else {
+        guard let node = dag.nodes.values.first(where: { $0.nodeId == nodeId }) else {
             return prefix + (isLast ? "└─ " : "├─ ") + "[Node not found]\n"
         }
 
@@ -268,56 +269,45 @@ struct DAGDebugView: View {
         return result
     }
 
-    private func getNodeDisplayName(_ node: DAGNode) -> String {
-        switch node.kind {
-        case .patch(let patchKind):
-            switch patchKind {
+    private func getNodeDisplayName(_ node: DAGNodeType) -> String {
+        switch node {
+        case .function(let functionNode):
+            switch functionNode.patch {
             case .value:
-            if let input = node.inputs.first,
-               case .value(let val) = input.input {
-                return "ValueNode(\(Int(val)))"
-            }
-            return "ValueNode(?)"
-
-        case .sin:
-            return "SinNode"
-
-        case .cos:
-            return "CosNode"
-
-        case .sqrt:
-            return "SquareRootNode"
-
-        case .add:
-            return "Add"
-
-        case .subtract:
-            return "Subtract"
-
-        case .greaterThan:
-            return "GreaterThan"
-
-        case .lessThan:
-            return "LessThan"
-
-        case .equal:
-            return "Equal"
-
-        case .optionPicker:
-            return "OptionPicker"
-
-        case .rounded:
-            return "RoundedNode"
-
+                if let input = functionNode.inputs.first,
+                   case .value(let val) = input.input {
+                    return "ValueNode(\(Int(val)))"
+                }
+                return "ValueNode(?)"
+            case .sin:
+                return "SinNode"
+            case .cos:
+                return "CosNode"
+            case .sqrt:
+                return "SquareRootNode"
+            case .add:
+                return "Add"
+            case .subtract:
+                return "Subtract"
+            case .greaterThan:
+                return "GreaterThan"
+            case .lessThan:
+                return "LessThan"
+            case .equal:
+                return "Equal"
+            case .optionPicker:
+                return "OptionPicker"
+            case .rounded:
+                return "RoundedNode"
             case .magnitude:
                 return "MagnitudeNode"
             }
-        case .layer(let layerKind):
-            return "Layer(\(layerKind))"
+        case .layerInput(let layerInputNode):
+            return "LayerInput(\(layerInputNode.layerInput.displayName))"
         }
     }
 
-    private func getChildNodes(of node: DAGNode, in dag: DAG) -> [UUID] {
+    private func getChildNodes(of node: DAGNodeType, in dag: DAG) -> [UUID] {
         return node.inputs.compactMap { input in
             if case .incomingEdge(let from) = input.input {
                 return from.nodeId
@@ -347,7 +337,7 @@ struct DAGDebugView: View {
             )
         }
 
-        guard let node = dag.nodes.first(where: { $0.nodeId == nodeId }) else {
+        guard let node = dag.nodes.values.first(where: { $0.nodeId == nodeId }) else {
             return AnyView(
                 HStack(spacing: 0) {
                     Text(prefix + (isLast ? "└─ " : "├─ "))
@@ -379,7 +369,14 @@ struct DAGDebugView: View {
                         .foregroundColor(.secondary)
                     Text(nodeName)
                         .foregroundColor(nodeColor)
-                        .fontWeight(node.kind == .patch(.value) ? .regular : .semibold)
+                        .fontWeight({
+                            switch node {
+                            case .function(let functionNode):
+                                return functionNode.patch == .value ? .regular : .semibold
+                            case .layerInput:
+                                return .semibold
+                            }
+                        }())
                 }
                 .font(.system(.body, design: .monospaced))
 
@@ -400,27 +397,27 @@ struct DAGDebugView: View {
         )
     }
 
-    private func getNodeColor(_ node: DAGNode) -> Color {
-        switch node.kind {
-        case .patch(let patchKind):
-            switch patchKind {
+    private func getNodeColor(_ node: DAGNodeType) -> Color {
+        switch node {
+        case .function(let functionNode):
+            switch functionNode.patch {
             case .value:
-            return .blue
-        case .sin, .cos, .sqrt, .rounded, .magnitude:
-            return .green
-        case .add, .subtract, .greaterThan, .lessThan, .equal:
-            return .purple
+                return .blue
+            case .sin, .cos, .sqrt, .rounded, .magnitude:
+                return .green
+            case .add, .subtract, .greaterThan, .lessThan, .equal:
+                return .purple
             case .optionPicker:
                 return .orange
             }
-        case .layer:
+        case .layerInput:
             return .gray
         }
     }
 
     private func findSourceNodes(in dag: DAG) -> [UUID] {
         // Source nodes are nodes that have no incoming edges (only value inputs)
-        return dag.nodes.compactMap { node -> UUID? in
+        return dag.nodes.compactMap { (nodeId, node) -> UUID? in
             // Check if this node has any incoming edges from other nodes
             let hasIncomingEdges = node.inputs.contains { input in
                 if case .incomingEdge = input.input {
@@ -454,7 +451,7 @@ struct DAGDebugView: View {
             )
         }
 
-        guard let node = dag.nodes.first(where: { $0.nodeId == nodeId }) else {
+        guard let node = dag.nodes.values.first(where: { $0.nodeId == nodeId }) else {
             return AnyView(
                 HStack(spacing: 0) {
                     Text(prefix + (isLast ? "└─ " : "├─ "))
@@ -486,7 +483,14 @@ struct DAGDebugView: View {
                         .foregroundColor(.secondary)
                     Text(nodeName)
                         .foregroundColor(nodeColor)
-                        .fontWeight(node.kind == .patch(.value) ? .regular : .semibold)
+                        .fontWeight({
+                            switch node {
+                            case .function(let functionNode):
+                                return functionNode.patch == .value ? .regular : .semibold
+                            case .layerInput:
+                                return .semibold
+                            }
+                        }())
                 }
                 .font(.system(.body, design: .monospaced))
 
@@ -509,7 +513,7 @@ struct DAGDebugView: View {
 
     private func findDownstreamNodes(for nodeId: UUID, in dag: DAG) -> [UUID] {
         // Find all nodes that have this nodeId as an input
-        return dag.nodes.compactMap { node in
+        return dag.nodes.compactMap { (currentNodeId, node) in
             let hasInputFromNode = node.inputs.contains { input in
                 if case .incomingEdge(let from) = input.input {
                     return from.nodeId == nodeId
@@ -564,7 +568,7 @@ struct DAGDebugView: View {
     }
 
     private func allDependenciesProcessed(_ nodeId: UUID, in dag: DAG, processedNodes: Set<UUID>) -> Bool {
-        guard let node = dag.nodes.first(where: { $0.nodeId == nodeId }) else {
+        guard let node = dag.nodes.values.first(where: { $0.nodeId == nodeId }) else {
             return false
         }
 
@@ -582,7 +586,7 @@ struct DAGDebugView: View {
     private func displayDAGLevel(_ nodeIds: [UUID], levelIndex: Int, totalLevels: Int) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(Array(nodeIds.enumerated()), id: \.offset) { nodeIndex, nodeId in
-                if let node = parsedDAG?.nodes.first(where: { $0.nodeId == nodeId }) {
+                if let node = parsedProjectData?.graph.nodes.values.first(where: { $0.nodeId == nodeId }) {
                     let isLastInLevel = nodeIndex == nodeIds.count - 1
                     let isFirstLevel = levelIndex == 0
                     let prefix = String(repeating: "   ", count: levelIndex)
@@ -593,7 +597,14 @@ struct DAGDebugView: View {
                             .foregroundColor(.secondary)
                         Text(getNodeDisplayName(node))
                             .foregroundColor(getNodeColor(node))
-                            .fontWeight(node.kind == .patch(.value) ? .regular : .semibold)
+                            .fontWeight({
+                            switch node {
+                            case .function(let functionNode):
+                                return functionNode.patch == .value ? .regular : .semibold
+                            case .layerInput:
+                                return .semibold
+                            }
+                        }())
                     }
                     .font(.system(.body, design: .monospaced))
                 }

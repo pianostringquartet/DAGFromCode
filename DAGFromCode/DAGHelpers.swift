@@ -1,0 +1,204 @@
+//
+//  DAGHelpers.swift
+//  DAGFromCode
+//
+//  Created by Christian J Clampitt on 9/25/25.
+//
+
+import Foundation
+
+// MARK: - Protocols for unified node handling
+
+protocol DAGNodeProtocol {
+    var nodeId: UUID { get }
+    var inputs: [NodeInput] { get }
+}
+
+extension DAGNodeType: DAGNodeProtocol {
+    var nodeId: UUID {
+        switch self {
+        case .function(let node):
+            return node.nodeId
+        case .layerInput(let node):
+            return node.nodeId
+        }
+    }
+
+    // inputs property is already defined in Mapping.swift for DAGNodeType
+}
+
+extension DAGFunctionNode: DAGNodeProtocol {}
+extension DAGLayerInputNode: DAGNodeProtocol {
+    var inputs: [NodeInput] {
+        [input]
+    }
+}
+
+// MARK: - Builder pattern for creating nodes
+
+struct DAGNodeBuilder {
+
+    static func createValueNode(value: Double) -> DAGNodeType {
+        let nodeId = UUID()
+        let output = NodeOutput(
+            id: OutputCoordinate(nodeId: nodeId, portId: 0),
+            value: value
+        )
+        let functionNode = DAGFunctionNode(
+            nodeId: nodeId,
+            patch: .value,
+            inputs: [],
+            output: output
+        )
+        return .function(functionNode)
+    }
+
+    static func createFunctionNode(
+        patch: DAGFunction,
+        inputs: [NodeInput],
+        outputValue: Double
+    ) -> DAGNodeType {
+        let nodeId = UUID()
+        let output = NodeOutput(
+            id: OutputCoordinate(nodeId: nodeId, portId: 0),
+            value: outputValue
+        )
+        let functionNode = DAGFunctionNode(
+            nodeId: nodeId,
+            patch: patch,
+            inputs: inputs,
+            output: output
+        )
+        return .function(functionNode)
+    }
+
+    static func createLayerInputNode(
+        layerInput: PrototypeLayerInputKind,
+        input: NodeInput
+    ) -> DAGNodeType {
+        let nodeId = UUID()
+        let layerInputNode = DAGLayerInputNode(
+            nodeId: nodeId,
+            layerInput: layerInput,
+            input: input
+        )
+        return .layerInput(layerInputNode)
+    }
+}
+
+// MARK: - Extensions for easier value creation
+
+extension NodeInput {
+    static func value(_ value: Double, nodeId: UUID, portId: Int = 0) -> NodeInput {
+        NodeInput(
+            id: InputCoordinate(nodeId: nodeId, portId: portId),
+            input: .value(value)
+        )
+    }
+
+    static func edge(from outputCoordinate: OutputCoordinate, nodeId: UUID, portId: Int = 0) -> NodeInput {
+        NodeInput(
+            id: InputCoordinate(nodeId: nodeId, portId: portId),
+            input: .incomingEdge(from: outputCoordinate)
+        )
+    }
+}
+
+extension OutputCoordinate {
+    static func from(node: DAGNodeType, portId: Int = 0) -> OutputCoordinate {
+        OutputCoordinate(nodeId: node.id, portId: portId)
+    }
+}
+
+// MARK: - DAG extensions
+
+extension DAG {
+    static func empty(rootNodeId: UUID = UUID()) -> DAG {
+        DAG(nodes: [:], rootNodeId: rootNodeId)
+    }
+
+    func addingNode(_ node: DAGNodeType, setAsRoot: Bool = false) -> DAG {
+        var newNodes = nodes
+        newNodes[node.id] = node
+        let newRootId = setAsRoot ? node.id : rootNodeId
+        return DAG(nodes: newNodes, rootNodeId: newRootId)
+    }
+
+    func settingRoot(_ nodeId: UUID) -> DAG {
+        DAG(nodes: nodes, rootNodeId: nodeId)
+    }
+}
+
+// MARK: - ProjectData extensions
+
+extension ProjectData {
+    static func empty() -> ProjectData {
+        ProjectData(graph: DAG.empty(), views: [])
+    }
+
+    func addingNode(_ node: DAGNodeType, setAsRoot: Bool = false) -> ProjectData {
+        let newGraph = graph.addingNode(node, setAsRoot: setAsRoot)
+        return ProjectData(graph: newGraph, views: views)
+    }
+
+    func addingView(_ view: PrototypeLayer) -> ProjectData {
+        var newViews = views
+        newViews.append(view)
+        return ProjectData(graph: graph, views: newViews)
+    }
+
+    func settingRoot(_ nodeId: UUID) -> ProjectData {
+        let newGraph = graph.settingRoot(nodeId)
+        return ProjectData(graph: newGraph, views: views)
+    }
+}
+
+// MARK: - Debug and display helpers
+
+extension DAGFunction {
+    var displayName: String {
+        switch self {
+        case .value: return "Value"
+        case .sin: return "Sin"
+        case .cos: return "Cos"
+        case .sqrt: return "Sqrt"
+        case .add: return "Add"
+        case .subtract: return "Subtract"
+        case .greaterThan: return ">"
+        case .lessThan: return "<"
+        case .equal: return "=="
+        case .optionPicker: return "Option"
+        case .rounded: return "Rounded"
+        case .magnitude: return "Magnitude"
+        }
+    }
+}
+
+extension DAGNodeType {
+    var displayName: String {
+        switch self {
+        case .function(let node):
+            return node.patch.displayName
+        case .layerInput(let node):
+            return node.layerInput.rawValue.capitalized
+        }
+    }
+
+    var hasOutput: Bool {
+        switch self {
+        case .function:
+            return true
+        case .layerInput:
+            return false
+        }
+    }
+}
+
+extension PrototypeLayerInputKind {
+    var displayName: String {
+        switch self {
+        case .opacity: return "Opacity"
+        case .scaleEffect: return "Scale Effect"
+        }
+    }
+}

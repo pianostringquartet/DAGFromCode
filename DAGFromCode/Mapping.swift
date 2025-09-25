@@ -12,10 +12,28 @@ import SwiftParser
 
 // MARK: the entirety of the data we can pull from a Swift code string
 
+// A directed acyclic graph representing parsed Swift expressions
+struct DAG {
+    let nodes: [UUID: DAGNodeType] // Dictionary for O(1) node lookups
+    let rootNodeId: UUID           // Explicit root node tracking
+
+    func getRootNode() -> DAGNodeType? {
+        return nodes[rootNodeId]
+    }
+
+    func getAllNodes() -> [DAGNodeType] {
+        return Array(nodes.values)
+    }
+
+    func getNode(by id: UUID) -> DAGNodeType? {
+        return nodes[id]
+    }
+}
+
 // The result of parsing a Swift code string
 struct ProjectData {
-    let nodes: [UUID: DAGNodeType] // the DAG, i.e. functons + layer-inputs
-    let views: [PrototypeLayer] // the contents of the prototype window
+    let graph: DAG                 // The DAG structure
+    let views: [PrototypeLayer]    // the contents of the prototype window
 }
 
 
@@ -159,17 +177,4 @@ struct OutputCoordinate: Equatable, Hashable {
 }
 
 
-// MARK: legacy
-
-// TODO: remove
-struct DAGNode {
-    let nodeId: UUID
-    let kind: DAGNodeKind
-    let inputs: [NodeInput] // array of inputs (empty for value nodes, 1+ for function nodes)
-    let output: NodeOutput // single output for now
-}
-
-enum DAGNodeKind: Equatable, Hashable {
-    case patch(DAGFunction), layerInput(PrototypeLayerInputKind)
-}
 
