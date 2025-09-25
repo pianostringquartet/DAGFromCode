@@ -62,8 +62,29 @@ class DAGParser {
                 }
             case let .stmt(stmt):
                 print("🔍 Found .stmt case with type: \(type(of: stmt))")
-                print("⚠️ Statement (not expression) type: \(type(of: stmt))")
-                // For now, let's see what other statement types we encounter
+                print("🔍 Statement content: \(stmt)")
+
+                // Check if this statement contains an IfExprSyntax that can be treated as an expression
+                if let ifExpr = stmt.as(IfExprSyntax.self) {
+                    print("🔍 Direct cast: This .stmt is an IfExprSyntax - treating as expression")
+                    expressionStatement = statement
+                } else {
+                    // Check if it's an ExpressionStmtSyntax wrapping an expression
+                    print("🔍 Checking for statement wrappers...")
+
+                    // Try different statement wrapper types
+                    if let exprStmt = stmt.as(ExpressionStmtSyntax.self) {
+                        print("🔍 Found ExpressionStmtSyntax wrapper")
+                        if exprStmt.expression.is(IfExprSyntax.self) {
+                            print("🔍 ExpressionStmtSyntax contains IfExprSyntax - treating as expression")
+                            expressionStatement = statement
+                        } else {
+                            print("⚠️ ExpressionStmtSyntax does not contain IfExprSyntax: \(type(of: exprStmt.expression))")
+                        }
+                    } else {
+                        print("⚠️ Statement (not expression) type: \(type(of: stmt))")
+                    }
+                }
             @unknown default:
                 print("⚠️ Unknown CodeBlockItemSyntax.Item case: \(statement.item)")
             }
@@ -87,8 +108,25 @@ class DAGParser {
             case let .expr(foundExpr):
                 print("✅ Successfully extracted ExprSyntax from .expr case")
                 expr = foundExpr
+            case let .stmt(stmt):
+                // Handle statements that contain IfExprSyntax
+                if let ifExpr = stmt.as(IfExprSyntax.self) {
+                    print("✅ Successfully extracted IfExprSyntax from .stmt case (direct)")
+                    expr = ExprSyntax(ifExpr)
+                } else if let exprStmt = stmt.as(ExpressionStmtSyntax.self) {
+                    if let ifExpr = exprStmt.expression.as(IfExprSyntax.self) {
+                        print("✅ Successfully extracted IfExprSyntax from ExpressionStmtSyntax wrapper")
+                        expr = ExprSyntax(ifExpr)
+                    } else {
+                        print("❌ ExpressionStmtSyntax does not contain IfExprSyntax")
+                        return nil
+                    }
+                } else {
+                    print("❌ Statement does not contain an IfExprSyntax")
+                    return nil
+                }
             default:
-                print("❌ Expression statement is not actually an .expr case")
+                print("❌ Expression statement is not a supported case")
                 return nil
             }
         } else {
@@ -102,8 +140,25 @@ class DAGParser {
             case let .expr(foundExpr):
                 print("✅ Successfully parsed single statement as ExprSyntax")
                 expr = foundExpr
+            case let .stmt(stmt):
+                // Handle statements that contain IfExprSyntax in fallback case too
+                if let ifExpr = stmt.as(IfExprSyntax.self) {
+                    print("✅ Successfully parsed IfExprSyntax as expression in fallback (direct)")
+                    expr = ExprSyntax(ifExpr)
+                } else if let exprStmt = stmt.as(ExpressionStmtSyntax.self) {
+                    if let ifExpr = exprStmt.expression.as(IfExprSyntax.self) {
+                        print("✅ Successfully parsed IfExprSyntax from ExpressionStmtSyntax in fallback")
+                        expr = ExprSyntax(ifExpr)
+                    } else {
+                        print("❌ ExpressionStmtSyntax does not contain IfExprSyntax in fallback")
+                        return nil
+                    }
+                } else {
+                    print("❌ First statement does not contain an IfExprSyntax")
+                    return nil
+                }
             default:
-                print("❌ First statement is not an expression")
+                print("❌ First statement is not a supported type")
                 return nil
             }
         }
