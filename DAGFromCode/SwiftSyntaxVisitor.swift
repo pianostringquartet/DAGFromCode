@@ -648,8 +648,8 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
             outputValue: 0.0
         )
 
-        // Set as root and add to stack
-        currentNodeStack = [optionPickerNodeId]
+        // Add to stack
+        pushToStack(optionPickerNodeId)
         setAsRoot(optionPickerNodeId)
 
         print("\(indent())✅ Created OptionPicker DAGNode: \(String(optionPickerNodeId.uuidString.prefix(8)))")
@@ -723,8 +723,8 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
             outputValue: 0.0
         )
 
-        // Set as root and add to stack
-        currentNodeStack = [optionPickerNodeId]
+        // Add to stack
+        pushToStack(optionPickerNodeId)
         setAsRoot(optionPickerNodeId)
 
         print("\(indent())✅ Created OptionPicker DAGNode from if-else: \(String(optionPickerNodeId.uuidString.prefix(8)))")
