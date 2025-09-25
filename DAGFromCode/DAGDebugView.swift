@@ -303,6 +303,12 @@ struct DAGDebugView: View {
 
         case .optionPicker:
             return "OptionPicker"
+
+        case .rounded:
+            return "RoundedNode"
+
+        case .magnitude:
+            return "MagnitudeNode"
         }
     }
 
@@ -393,7 +399,7 @@ struct DAGDebugView: View {
         switch node.kind {
         case .value:
             return .blue
-        case .sin, .cos, .sqrt:
+        case .sin, .cos, .sqrt, .rounded, .magnitude:
             return .green
         case .add, .subtract, .greaterThan, .lessThan, .equal:
             return .purple

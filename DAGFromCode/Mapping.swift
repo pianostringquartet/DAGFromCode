@@ -62,6 +62,10 @@ enum DAGPatch: String, Equatable, Codable, Hashable, Identifiable {
     // ternary expressions, if/else
     case optionPicker
     
+    // methods
+    case rounded, magnitude
+    
+    
     var id: String {
         self.rawValue
     }

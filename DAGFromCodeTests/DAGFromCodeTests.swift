@@ -658,4 +658,81 @@ struct DAGFromCodeTests {
             }
         }
     }
+
+    // MARK: - Method Chaining Tests
+
+    @Test func parseSimpleRounded() throws {
+        let source = "5.9.rounded()"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 2)
+        #expect(dag?.description == "ValueNode(5) -> RoundedNode")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .rounded)
+    }
+
+    @Test func parseSimpleMagnitude() throws {
+        let source = "5.9.magnitude"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 2)
+        #expect(dag?.description == "ValueNode(5) -> MagnitudeNode")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .magnitude)
+    }
+
+    @Test func parseMethodChaining() throws {
+        let source = "5.9.rounded().magnitude"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 3)
+        #expect(dag?.description == "ValueNode(5) -> RoundedNode -> MagnitudeNode")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .magnitude)
+    }
+
+//    @Test func parseNegativeMagnitude() throws {
+//        let source = "(-3.2).magnitude"
+//        let dag = DAGParser.parse(source)
+//
+//        #expect(dag != nil)
+//        #expect(dag?.nodes.count == 2)
+//        #expect(dag?.description == "ValueNode(-3) -> MagnitudeNode")
+//
+//        let rootNode = dag?.getRootNode()
+//        #expect(rootNode?.kind == .magnitude)
+//    }
+
+    @Test func parseVariableMethod() throws {
+        let source = """
+        let x = 2.7
+        x.rounded()
+        """
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 2)
+        #expect(dag?.description == "ValueNode(2) -> RoundedNode")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .rounded)
+    }
+
+    @Test func parseNestedWithMethod() throws {
+        let source = "sin(5.9.rounded())"
+        let dag = DAGParser.parse(source)
+
+        #expect(dag != nil)
+        #expect(dag?.nodes.count == 3)
+        #expect(dag?.description == "ValueNode(5) -> RoundedNode -> SinNode")
+
+        let rootNode = dag?.getRootNode()
+        #expect(rootNode?.kind == .sin)
+    }
 }

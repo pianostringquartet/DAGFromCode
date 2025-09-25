@@ -753,6 +753,70 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         return .skipChildren
     }
 
+    override func visit(_ node: MemberAccessExprSyntax) -> SyntaxVisitorContinueKind {
+        print("\(indent())🔗 Visiting MemberAccessExprSyntax: \(node)")
+
+        // Get method name using the correct non-deprecated API
+        let memberName = node.declName.baseName.text
+        print("\(indent())📌 Method name: '\(memberName)'")
+
+        // Check if this is a supported Double method
+        guard let patchKind = methodPatchKind(from: memberName) else {
+            print("\(indent())⚠️ Unsupported method: '\(memberName)'")
+            return .visitChildren
+        }
+
+        // Walk the base expression (the object the method is called on) - handle optional base
+        guard let base = node.base else {
+            print("\(indent())❌ No base expression found for member access")
+            return .skipChildren
+        }
+
+        print("\(indent())🔍 Walking base expression: \(base)")
+        walk(base)
+
+        // Now we should have the base value on the stack
+        guard let baseNodeId = nodeStack.last else {
+            print("\(indent())❌ No base value found on stack for method call")
+            return .skipChildren
+        }
+
+        print("\(indent())⚡ Processing method call: \(String(baseNodeId.uuidString.prefix(8))).\(memberName)()")
+
+        // Create the method node
+        let nodeId = UUID()
+        let inputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
+        let outputCoord = OutputCoordinate(nodeId: nodeId, portId: 0)
+
+        let upstreamOutput = OutputCoordinate(nodeId: baseNodeId, portId: 0)
+        let input = NodeInput(id: inputCoord, input: .incomingEdge(from: upstreamOutput))
+        let output = NodeOutput(id: outputCoord, value: 0.0)
+
+        let dagNode = DAGNode(
+            nodeId: nodeId,
+            kind: patchKind,
+            inputs: [input],
+            output: output
+        )
+
+        nodes.append(dagNode)
+        print("\(indent())✅ Created \(patchKind) DAGNode: \(String(nodeId.uuidString.prefix(8)))")
+
+        // Replace base with our method node on the stack
+        nodeStack[nodeStack.count - 1] = nodeId
+        print("\(indent())🔄 Replaced base node with method node: \(String(nodeId.uuidString.prefix(8)))")
+
+        // Check if this should be the root node (if we're at the end of the chain)
+        if nodeStack.count == 1 {
+            rootNodeId = nodeId
+            print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8)))")
+        }
+
+        print("\(indent())📚 Final stack after method call: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
+
+        return .skipChildren
+    }
+
     // Helper method to extract expression from code block
     private func walkCodeBlock(_ codeBlock: SyntaxProtocol) {
         print("\(indent())🧱 Walking code block: \(codeBlock)")
@@ -805,6 +869,14 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         case ">": return .greaterThan
         case "<": return .lessThan
         case "==": return .equal
+        default: return nil
+        }
+    }
+
+    private func methodPatchKind(from methodName: String) -> DAGPatch? {
+        switch methodName {
+        case "rounded": return .rounded
+        case "magnitude": return .magnitude
         default: return nil
         }
     }
@@ -866,6 +938,12 @@ extension DAG: CustomStringConvertible {
 
             case .sqrt:
                 return describeUnaryFunction(name: "SquareRootNode")
+
+            case .rounded:
+                return describeUnaryFunction(name: "RoundedNode")
+
+            case .magnitude:
+                return describeUnaryFunction(name: "MagnitudeNode")
 
             case .add:
                 if node.inputs.count >= 2 {
