@@ -44,10 +44,17 @@ struct DAGNodeBuilder {
             id: OutputCoordinate(nodeId: nodeId, portId: 0),
             value: value
         )
+
+        // Create input with the value (this is what tests and descriptions expect)
+        let input = NodeInput(
+            id: InputCoordinate(nodeId: nodeId, portId: 0),
+            input: .value(value)
+        )
+
         let functionNode = DAGFunctionNode(
             nodeId: nodeId,
             patch: .value,
-            inputs: [],
+            inputs: [input],
             output: output
         )
         return .function(functionNode)
@@ -191,6 +198,27 @@ extension DAGNodeType {
         case .layerInput:
             return false
         }
+    }
+
+    /// Returns the function node if this is a function type, nil otherwise
+    var functionNode: DAGFunctionNode? {
+        switch self {
+        case .function(let node): return node
+        case .layerInput: return nil
+        }
+    }
+
+    /// Returns the layer input node if this is a layer input type, nil otherwise
+    var layerInputNode: DAGLayerInputNode? {
+        switch self {
+        case .function: return nil
+        case .layerInput(let node): return node
+        }
+    }
+
+    /// Convenience property to check the patch type for function nodes
+    var patch: DAGFunction? {
+        return functionNode?.patch
     }
 }
 

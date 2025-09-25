@@ -37,62 +37,62 @@ struct DAGFromCodeTests {
 
     @Test func parseSingleFunction() throws {
         let source = "sin(1)"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 2)
-        #expect(dag?.description == "ValueNode(1) -> SinNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 2)
+        #expect(projectData?.description == "ValueNode(1) -> SinNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.sin))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .sin)
     }
 
     @Test func parseNestedFunctions() throws {
         let source = "sin(sqrt(4))"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3)
-        #expect(dag?.description == "ValueNode(4) -> SquareRootNode -> SinNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3)
+        #expect(projectData?.description == "ValueNode(4) -> SquareRootNode -> SinNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.sin))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .sin)
     }
 
     @Test func parseTripleNested() throws {
         let source = "cos(sin(sqrt(4)))"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 4)
-        #expect(dag?.description == "ValueNode(4) -> SquareRootNode -> SinNode -> CosNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 4)
+        #expect(projectData?.description == "ValueNode(4) -> SquareRootNode -> SinNode -> CosNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.cos))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .cos)
     }
 
     @Test func parseCosSin() throws {
         let source = "cos(sin(1))"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3)
-        #expect(dag?.description == "ValueNode(1) -> SinNode -> CosNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3)
+        #expect(projectData?.description == "ValueNode(1) -> SinNode -> CosNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.cos))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .cos)
     }
 
     @Test func parseFloatValue() throws {
         let source = "2.5"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 1)
-        #expect(dag?.description == "ValueNode(2)")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 1)
+        #expect(projectData?.description == "ValueNode(2)")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.value))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .value)
         if let firstInput = rootNode?.inputs.first,
            case .value(let val) = firstInput.input {
             #expect(val == 2.5)
@@ -103,35 +103,35 @@ struct DAGFromCodeTests {
 
     @Test func parseSqrtOnly() throws {
         let source = "sqrt(9)"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 2)
-        #expect(dag?.description == "ValueNode(9) -> SquareRootNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 2)
+        #expect(projectData?.description == "ValueNode(9) -> SquareRootNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.sqrt))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .sqrt)
     }
 
     @Test func verifyNodeConnections() throws {
         let source = "sin(sqrt(4))"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        guard let dag = dag else { return }
+        #expect(projectData != nil)
+        guard let projectData = projectData else { return }
 
-        let sinNode = dag.getRootNode()
-        #expect(sinNode?.kind == .patch(.sin))
+        let sinNode = projectData.graph.getRootNode()
+        #expect(sinNode?.patch == .sin)
 
         if let sinInput = sinNode?.inputs.first,
            case .incomingEdge(let from) = sinInput.input {
-            let sqrtNode = dag.nodes.first { $0.nodeId == from.nodeId }
-            #expect(sqrtNode?.kind == .patch(.sqrt))
+            let sqrtNode = projectData.graph.nodes[from.nodeId]
+            #expect(sqrtNode?.patch == .sqrt)
 
             if let sqrtInput = sqrtNode?.inputs.first,
                case .incomingEdge(let from2) = sqrtInput.input {
-                let valueNode = dag.nodes.first { $0.nodeId == from2.nodeId }
-                #expect(valueNode?.kind == .patch(.value))
+                let valueNode = projectData.graph.nodes[from2.nodeId]
+                #expect(valueNode?.patch == .value)
                 if let valueInput = valueNode?.inputs.first,
                    case .value(let val) = valueInput.input {
                     #expect(val == 4.0)
@@ -144,70 +144,70 @@ struct DAGFromCodeTests {
 
     @Test func parseSimpleAddition() throws {
         let source = "1 + 2"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3) // 1, 2, +
-        #expect(dag?.description == "Add(ValueNode(1), ValueNode(2))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3) // 1, 2, +
+        #expect(projectData?.description == "Add(ValueNode(1), ValueNode(2))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.add))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .add)
         #expect(rootNode?.inputs.count == 2)
     }
 
     @Test func parseSimpleSubtraction() throws {
         let source = "5 - 3"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3) // 5, 3, -
-        #expect(dag?.description == "Subtract(ValueNode(5), ValueNode(3))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3) // 5, 3, -
+        #expect(projectData?.description == "Subtract(ValueNode(5), ValueNode(3))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.subtract))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .subtract)
         #expect(rootNode?.inputs.count == 2)
     }
 
     @Test func parseNestedFunctionWithAddition() throws {
         let source = "sin(1 + 2)"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 4) // 1, 2, +, sin
-        #expect(dag?.description == "Add(ValueNode(1), ValueNode(2)) -> SinNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 4) // 1, 2, +, sin
+        #expect(projectData?.description == "Add(ValueNode(1), ValueNode(2)) -> SinNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.sin))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .sin)
     }
 
     @Test func parseNestedFunctionWithSubtraction() throws {
         let source = "cos(5 - 3)"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 4) // 5, 3, -, cos
-        #expect(dag?.description == "Subtract(ValueNode(5), ValueNode(3)) -> CosNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 4) // 5, 3, -, cos
+        #expect(projectData?.description == "Subtract(ValueNode(5), ValueNode(3)) -> CosNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.cos))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .cos)
     }
 
     @Test func verifyBinaryOperatorConnections() throws {
         let source = "1 + 2"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        guard let dag = dag else { return }
+        #expect(projectData != nil)
+        guard let projectData = projectData else { return }
 
-        let addNode = dag.getRootNode()
-        #expect(addNode?.kind == .patch(.add))
+        let addNode = projectData.graph.getRootNode()
+        #expect(addNode?.patch == .add)
         #expect(addNode?.inputs.count == 2)
 
         // Verify left input (port 0)
         if let leftInput = addNode?.inputs.first,
            case .incomingEdge(let leftFrom) = leftInput.input {
-            let leftValueNode = dag.nodes.first { $0.nodeId == leftFrom.nodeId }
-            #expect(leftValueNode?.kind == .patch(.value))
+            let leftValueNode = projectData.graph.nodes[leftFrom.nodeId]
+            #expect(leftValueNode?.patch == .value)
             if let valueInput = leftValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
                 #expect(val == 1.0)
@@ -218,8 +218,8 @@ struct DAGFromCodeTests {
         if addNode?.inputs.count ?? 0 > 1,
            let rightInput = addNode?.inputs[1],
            case .incomingEdge(let rightFrom) = rightInput.input {
-            let rightValueNode = dag.nodes.first { $0.nodeId == rightFrom.nodeId }
-            #expect(rightValueNode?.kind == .patch(.value))
+            let rightValueNode = projectData.graph.nodes[rightFrom.nodeId]
+            #expect(rightValueNode?.patch == .value)
             if let valueInput = rightValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
                 #expect(val == 2.0)
@@ -234,14 +234,14 @@ struct DAGFromCodeTests {
         let x = 16
         cos(sqrt(x))
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3) // 16, sqrt, cos
-        #expect(dag?.description == "ValueNode(16) -> SquareRootNode -> CosNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3) // 16, sqrt, cos
+        #expect(projectData?.description == "ValueNode(16) -> SquareRootNode -> CosNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.cos))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .cos)
     }
 
     @Test func parseVarVariableDeclaration() throws {
@@ -249,14 +249,14 @@ struct DAGFromCodeTests {
         var x = 4
         cos(sqrt(x))
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3) // 4, sqrt, cos
-        #expect(dag?.description == "ValueNode(4) -> SquareRootNode -> CosNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3) // 4, sqrt, cos
+        #expect(projectData?.description == "ValueNode(4) -> SquareRootNode -> CosNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.cos))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .cos)
     }
 
     @Test func parseFloatVariableDeclaration() throws {
@@ -264,14 +264,14 @@ struct DAGFromCodeTests {
         let x = 2.5
         sin(x)
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 2) // 2.5, sin
-        #expect(dag?.description == "ValueNode(2) -> SinNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 2) // 2.5, sin
+        #expect(projectData?.description == "ValueNode(2) -> SinNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.sin))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .sin)
     }
 
     @Test func verifyVariableReferenceConnections() throws {
@@ -279,18 +279,18 @@ struct DAGFromCodeTests {
         let x = 9
         sqrt(x)
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        guard let dag = dag else { return }
+        #expect(projectData != nil)
+        guard let projectData = projectData else { return }
 
-        let sqrtNode = dag.getRootNode()
-        #expect(sqrtNode?.kind == .patch(.sqrt))
+        let sqrtNode = projectData.graph.getRootNode()
+        #expect(sqrtNode?.patch == .sqrt)
 
         if let sqrtInput = sqrtNode?.inputs.first,
            case .incomingEdge(let from) = sqrtInput.input {
-            let valueNode = dag.nodes.first { $0.nodeId == from.nodeId }
-            #expect(valueNode?.kind == .patch(.value))
+            let valueNode = projectData.graph.nodes[from.nodeId]
+            #expect(valueNode?.patch == .value)
             if let valueInput = valueNode?.inputs.first,
                case .value(let val) = valueInput.input {
                 #expect(val == 9.0)
@@ -306,14 +306,14 @@ struct DAGFromCodeTests {
         let y = 8
         x + y
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3) // x(8), y(8), +
-        #expect(dag?.description == "Add(ValueNode(8), ValueNode(8))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3) // x(8), y(8), +
+        #expect(projectData?.description == "Add(ValueNode(8), ValueNode(8))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.add))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .add)
         #expect(rootNode?.inputs.count == 2)
     }
 
@@ -323,14 +323,14 @@ struct DAGFromCodeTests {
         let b = 5
         a - b
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3) // a(3), b(5), -
-        #expect(dag?.description == "Subtract(ValueNode(3), ValueNode(5))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3) // a(3), b(5), -
+        #expect(projectData?.description == "Subtract(ValueNode(3), ValueNode(5))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.subtract))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .subtract)
         #expect(rootNode?.inputs.count == 2)
     }
 
@@ -340,14 +340,14 @@ struct DAGFromCodeTests {
         let y = 20
         x + y
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3) // x(10), y(20), +
-        #expect(dag?.description == "Add(ValueNode(10), ValueNode(20))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3) // x(10), y(20), +
+        #expect(projectData?.description == "Add(ValueNode(10), ValueNode(20))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.add))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .add)
     }
 
     @Test func verifyMultipleVariableConnections() throws {
@@ -356,13 +356,13 @@ struct DAGFromCodeTests {
         let y = 8
         x + y
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        guard let dag = dag else { return }
+        #expect(projectData != nil)
+        guard let projectData = projectData else { return }
 
-        let addNode = dag.getRootNode()
-        #expect(addNode?.kind == .patch(.add))
+        let addNode = projectData.graph.getRootNode()
+        #expect(addNode?.patch == .add)
         #expect(addNode?.inputs.count == 2)
 
         // Verify both inputs are from separate ValueNodes
@@ -375,11 +375,11 @@ struct DAGFromCodeTests {
         }
 
         // Find both value nodes
-        let leftValueNode = dag.nodes.first { $0.nodeId == leftFrom.nodeId }
-        let rightValueNode = dag.nodes.first { $0.nodeId == rightFrom.nodeId }
+        let leftValueNode = projectData.graph.nodes[leftFrom.nodeId]
+        let rightValueNode = projectData.graph.nodes[rightFrom.nodeId]
 
-        #expect(leftValueNode?.kind == .patch(.value))
-        #expect(rightValueNode?.kind == .patch(.value))
+        #expect(leftValueNode?.patch == .value)
+        #expect(rightValueNode?.patch == .value)
 
         // Verify they are different node instances (separate ValueNodes)
         #expect(leftValueNode?.nodeId != rightValueNode?.nodeId)
@@ -402,41 +402,41 @@ struct DAGFromCodeTests {
         let b = 9
         sin(a + b)
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 4) // a(4), b(9), +, sin
-        #expect(dag?.description == "Add(ValueNode(4), ValueNode(9)) -> SinNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 4) // a(4), b(9), +, sin
+        #expect(projectData?.description == "Add(ValueNode(4), ValueNode(9)) -> SinNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.sin))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .sin)
     }
 
     // MARK: - Comparison Operator Tests
 
     @Test func parseGreaterThan() throws {
         let source = "5 > 3"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3) // 5, 3, >
-        #expect(dag?.description == "GreaterThan(ValueNode(5), ValueNode(3))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3) // 5, 3, >
+        #expect(projectData?.description == "GreaterThan(ValueNode(5), ValueNode(3))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.greaterThan))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .greaterThan)
         #expect(rootNode?.inputs.count == 2)
     }
 
     @Test func parseLessThan() throws {
         let source = "2 < 10"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3) // 2, 10, <
-        #expect(dag?.description == "LessThan(ValueNode(2), ValueNode(10))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3) // 2, 10, <
+        #expect(projectData?.description == "LessThan(ValueNode(2), ValueNode(10))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.lessThan))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .lessThan)
         #expect(rootNode?.inputs.count == 2)
     }
 
@@ -445,14 +445,14 @@ struct DAGFromCodeTests {
         let x = 7
         x == 5
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3) // x(7), 5, ==
-        #expect(dag?.description == "Equal(ValueNode(7), ValueNode(5))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3) // x(7), 5, ==
+        #expect(projectData?.description == "Equal(ValueNode(7), ValueNode(5))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.equal))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .equal)
         #expect(rootNode?.inputs.count == 2)
     }
 
@@ -460,27 +460,27 @@ struct DAGFromCodeTests {
 
     @Test func parseSimpleTernary() throws {
         let source = "true ? 5 : 10"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 4) // true, 5, 10, ?:
-        #expect(dag?.description == "OptionPicker(ValueNode(1), ValueNode(10), ValueNode(5))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 4) // true, 5, 10, ?:
+        #expect(projectData?.description == "OptionPicker(ValueNode(1), ValueNode(10), ValueNode(5))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.optionPicker))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .optionPicker)
         #expect(rootNode?.inputs.count == 3)
     }
 
     @Test func parseComparisonTernary() throws {
         let source = "5 > 4 ? 100 : 0"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 6) // 5, 4, >, 100, 0, ?:
-        #expect(dag?.description == "OptionPicker(GreaterThan(ValueNode(5), ValueNode(4)), ValueNode(0), ValueNode(100))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 6) // 5, 4, >, 100, 0, ?:
+        #expect(projectData?.description == "OptionPicker(GreaterThan(ValueNode(5), ValueNode(4)), ValueNode(0), ValueNode(100))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.optionPicker))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .optionPicker)
         #expect(rootNode?.inputs.count == 3)
     }
 
@@ -490,46 +490,46 @@ struct DAGFromCodeTests {
         let y = 12
         x > y ? x : y
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 6) // x(8), y(12), >, x(8), y(12), ?:
-        #expect(dag?.description == "OptionPicker(GreaterThan(ValueNode(8), ValueNode(12)), ValueNode(12), ValueNode(8))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 6) // x(8), y(12), >, x(8), y(12), ?:
+        #expect(projectData?.description == "OptionPicker(GreaterThan(ValueNode(8), ValueNode(12)), ValueNode(12), ValueNode(8))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.optionPicker))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .optionPicker)
         #expect(rootNode?.inputs.count == 3)
     }
 
     @Test func parseNestedTernary() throws {
         let source = "true ? (false ? 1 : 2) : 3"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 7) // true, false, 1, 2, 3, inner ?:, outer ?:
-        #expect(dag?.description == "OptionPicker(ValueNode(1), ValueNode(3), OptionPicker(ValueNode(0), ValueNode(2), ValueNode(1)))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 7) // true, false, 1, 2, 3, inner ?:, outer ?:
+        #expect(projectData?.description == "OptionPicker(ValueNode(1), ValueNode(3), OptionPicker(ValueNode(0), ValueNode(2), ValueNode(1)))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.optionPicker))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .optionPicker)
         #expect(rootNode?.inputs.count == 3)
     }
 
     @Test func verifyTernaryConnections() throws {
         let source = "true ? 5 : 10"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        guard let dag = dag else { return }
+        #expect(projectData != nil)
+        guard let projectData = projectData else { return }
 
-        let ternaryNode = dag.getRootNode()
-        #expect(ternaryNode?.kind == .patch(.optionPicker))
+        let ternaryNode = projectData.graph.getRootNode()
+        #expect(ternaryNode?.patch == .optionPicker)
         #expect(ternaryNode?.inputs.count == 3)
 
         // Verify condition input (port 0)
         if let conditionInput = ternaryNode?.inputs.first,
            case .incomingEdge(let conditionFrom) = conditionInput.input {
-            let conditionValueNode = dag.nodes.first { $0.nodeId == conditionFrom.nodeId }
-            #expect(conditionValueNode?.kind == .patch(.value))
+            let conditionValueNode = projectData.graph.nodes[conditionFrom.nodeId]
+            #expect(conditionValueNode?.patch == .value)
             if let valueInput = conditionValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
                 #expect(val == 1.0) // true = 1.0
@@ -540,8 +540,8 @@ struct DAGFromCodeTests {
         if ternaryNode?.inputs.count ?? 0 > 1,
            let falseInput = ternaryNode?.inputs[1],
            case .incomingEdge(let falseFrom) = falseInput.input {
-            let falseValueNode = dag.nodes.first { $0.nodeId == falseFrom.nodeId }
-            #expect(falseValueNode?.kind == .patch(.value))
+            let falseValueNode = projectData.graph.nodes[falseFrom.nodeId]
+            #expect(falseValueNode?.patch == .value)
             if let valueInput = falseValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
                 #expect(val == 10.0)
@@ -552,8 +552,8 @@ struct DAGFromCodeTests {
         if ternaryNode?.inputs.count ?? 0 > 2,
            let trueInput = ternaryNode?.inputs[2],
            case .incomingEdge(let trueFrom) = trueInput.input {
-            let trueValueNode = dag.nodes.first { $0.nodeId == trueFrom.nodeId }
-            #expect(trueValueNode?.kind == .patch(.value))
+            let trueValueNode = projectData.graph.nodes[trueFrom.nodeId]
+            #expect(trueValueNode?.patch == .value)
             if let valueInput = trueValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
                 #expect(val == 5.0)
@@ -565,27 +565,27 @@ struct DAGFromCodeTests {
 
     @Test func parseSimpleIfElse() throws {
         let source = "if true { 5 } else { 10 }"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 4) // true, 5, 10, if-else
-        #expect(dag?.description == "OptionPicker(ValueNode(1), ValueNode(10), ValueNode(5))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 4) // true, 5, 10, if-else
+        #expect(projectData?.description == "OptionPicker(ValueNode(1), ValueNode(10), ValueNode(5))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.optionPicker))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .optionPicker)
         #expect(rootNode?.inputs.count == 3)
     }
 
     @Test func parseComparisonIfElse() throws {
         let source = "if 5 > 4 { 100 } else { 0 }"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 6) // 5, 4, >, 100, 0, if-else
-        #expect(dag?.description == "OptionPicker(GreaterThan(ValueNode(5), ValueNode(4)), ValueNode(0), ValueNode(100))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 6) // 5, 4, >, 100, 0, if-else
+        #expect(projectData?.description == "OptionPicker(GreaterThan(ValueNode(5), ValueNode(4)), ValueNode(0), ValueNode(100))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.optionPicker))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .optionPicker)
         #expect(rootNode?.inputs.count == 3)
     }
 
@@ -595,46 +595,46 @@ struct DAGFromCodeTests {
         let y = 12
         if x > y { x } else { y }
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 6) // x(8), y(12), >, x(8), y(12), if-else
-        #expect(dag?.description == "OptionPicker(GreaterThan(ValueNode(8), ValueNode(12)), ValueNode(12), ValueNode(8))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 6) // x(8), y(12), >, x(8), y(12), if-else
+        #expect(projectData?.description == "OptionPicker(GreaterThan(ValueNode(8), ValueNode(12)), ValueNode(12), ValueNode(8))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.optionPicker))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .optionPicker)
         #expect(rootNode?.inputs.count == 3)
     }
 
     @Test func parseNestedIfElse() throws {
         let source = "if true { if false { 1 } else { 2 } } else { 3 }"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 7) // true, false, 1, 2, 3, inner if-else, outer if-else
-        #expect(dag?.description == "OptionPicker(ValueNode(1), ValueNode(3), OptionPicker(ValueNode(0), ValueNode(2), ValueNode(1)))")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 7) // true, false, 1, 2, 3, inner if-else, outer if-else
+        #expect(projectData?.description == "OptionPicker(ValueNode(1), ValueNode(3), OptionPicker(ValueNode(0), ValueNode(2), ValueNode(1)))")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.optionPicker))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .optionPicker)
         #expect(rootNode?.inputs.count == 3)
     }
 
     @Test func verifyIfElseConnections() throws {
         let source = "if true { 5 } else { 10 }"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        guard let dag = dag else { return }
+        #expect(projectData != nil)
+        guard let projectData = projectData else { return }
 
-        let ifElseNode = dag.getRootNode()
-        #expect(ifElseNode?.kind == .patch(.optionPicker))
+        let ifElseNode = projectData.graph.getRootNode()
+        #expect(ifElseNode?.patch == .optionPicker)
         #expect(ifElseNode?.inputs.count == 3)
 
         // Verify condition input (port 0)
         if let conditionInput = ifElseNode?.inputs.first,
            case .incomingEdge(let conditionFrom) = conditionInput.input {
-            let conditionValueNode = dag.nodes.first { $0.nodeId == conditionFrom.nodeId }
-            #expect(conditionValueNode?.kind == .patch(.value))
+            let conditionValueNode = projectData.graph.nodes[conditionFrom.nodeId]
+            #expect(conditionValueNode?.patch == .value)
             if let valueInput = conditionValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
                 #expect(val == 1.0) // true = 1.0
@@ -645,8 +645,8 @@ struct DAGFromCodeTests {
         if ifElseNode?.inputs.count ?? 0 > 1,
            let falseInput = ifElseNode?.inputs[1],
            case .incomingEdge(let falseFrom) = falseInput.input {
-            let falseValueNode = dag.nodes.first { $0.nodeId == falseFrom.nodeId }
-            #expect(falseValueNode?.kind == .patch(.value))
+            let falseValueNode = projectData.graph.nodes[falseFrom.nodeId]
+            #expect(falseValueNode?.patch == .value)
             if let valueInput = falseValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
                 #expect(val == 10.0)
@@ -657,8 +657,8 @@ struct DAGFromCodeTests {
         if ifElseNode?.inputs.count ?? 0 > 2,
            let trueInput = ifElseNode?.inputs[2],
            case .incomingEdge(let trueFrom) = trueInput.input {
-            let trueValueNode = dag.nodes.first { $0.nodeId == trueFrom.nodeId }
-            #expect(trueValueNode?.kind == .patch(.value))
+            let trueValueNode = projectData.graph.nodes[trueFrom.nodeId]
+            #expect(trueValueNode?.patch == .value)
             if let valueInput = trueValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
                 #expect(val == 5.0)
@@ -670,50 +670,50 @@ struct DAGFromCodeTests {
 
     @Test func parseSimpleRounded() throws {
         let source = "5.9.rounded()"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 2)
-        #expect(dag?.description == "ValueNode(5) -> RoundedNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 2)
+        #expect(projectData?.description == "ValueNode(5) -> RoundedNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.rounded))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .rounded)
     }
 
     @Test func parseSimpleMagnitude() throws {
         let source = "5.9.magnitude"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 2)
-        #expect(dag?.description == "ValueNode(5) -> MagnitudeNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 2)
+        #expect(projectData?.description == "ValueNode(5) -> MagnitudeNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.magnitude))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .magnitude)
     }
 
     @Test func parseMethodChaining() throws {
         let source = "5.9.rounded().magnitude"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3)
-        #expect(dag?.description == "ValueNode(5) -> RoundedNode -> MagnitudeNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3)
+        #expect(projectData?.description == "ValueNode(5) -> RoundedNode -> MagnitudeNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.magnitude))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .magnitude)
     }
 
 //    @Test func parseNegativeMagnitude() throws {
 //        let source = "(-3.2).magnitude"
-//        let dag = DAGParser.parse(source)
+//        let projectData = ProjectDataParser.parse(source)
 //
-//        #expect(dag != nil)
-//        #expect(dag?.nodes.count == 2)
-//        #expect(dag?.description == "ValueNode(-3) -> MagnitudeNode")
+//        #expect(projectData != nil)
+//        #expect(projectData?.graph.nodes.count == 2)
+//        #expect(projectData?.description == "ValueNode(-3) -> MagnitudeNode")
 //
-//        let rootNode = dag?.getRootNode()
-//        #expect(rootNode?.kind == .patch(.magnitude))
+//        let rootNode = projectData?.graph.getRootNode()
+//        #expect(rootNode?.patch == .magnitude)
 //    }
 
     @Test func parseVariableMethod() throws {
@@ -721,25 +721,25 @@ struct DAGFromCodeTests {
         let x = 2.7
         x.rounded()
         """
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 2)
-        #expect(dag?.description == "ValueNode(2) -> RoundedNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 2)
+        #expect(projectData?.description == "ValueNode(2) -> RoundedNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.rounded))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .rounded)
     }
 
     @Test func parseNestedWithMethod() throws {
         let source = "sin(5.9.rounded())"
-        let dag = DAGParser.parse(source)
+        let projectData = ProjectDataParser.parse(source)
 
-        #expect(dag != nil)
-        #expect(dag?.nodes.count == 3)
-        #expect(dag?.description == "ValueNode(5) -> RoundedNode -> SinNode")
+        #expect(projectData != nil)
+        #expect(projectData?.graph.nodes.count == 3)
+        #expect(projectData?.description == "ValueNode(5) -> RoundedNode -> SinNode")
 
-        let rootNode = dag?.getRootNode()
-        #expect(rootNode?.kind == .patch(.sin))
+        let rootNode = projectData?.graph.getRootNode()
+        #expect(rootNode?.patch == .sin)
     }
 }
