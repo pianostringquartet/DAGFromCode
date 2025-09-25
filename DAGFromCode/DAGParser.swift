@@ -39,14 +39,33 @@ class DAGParser {
         var expressionStatement: CodeBlockItemSyntax?
 
         for statement in sourceFile.statements {
-            if statement.item.is(VariableDeclSyntax.self) {
-                print("🎯 Statement is VariableDeclSyntax")
-                variableStatements.append(statement)
-            } else if statement.item.is(ExprSyntax.self) {
-                print("🎯 Statement is ExprSyntax")
+            print("🔍 Analyzing statement.item type: \(type(of: statement.item))")
+            print("🔍 Statement.item content: \(statement.item)")
+
+            // Check what the actual item is by trying all possible cases
+            switch statement.item {
+            case let .expr(expr):
+                print("🔍 Found .expr case with type: \(type(of: expr))")
+                if expr.is(IfExprSyntax.self) {
+                    print("🎯 Statement is IfExprSyntax (if expression)")
+                } else {
+                    print("🎯 Statement is ExprSyntax (other expression type: \(type(of: expr)))")
+                }
                 expressionStatement = statement
-            } else {
-                print("⚠️ Unknown statement type: \(type(of: statement.item))")
+            case let .decl(decl):
+                print("🔍 Found .decl case with type: \(type(of: decl))")
+                if decl.is(VariableDeclSyntax.self) {
+                    print("🎯 Statement is VariableDeclSyntax")
+                    variableStatements.append(statement)
+                } else {
+                    print("🎯 Statement is other DeclSyntax: \(type(of: decl))")
+                }
+            case let .stmt(stmt):
+                print("🔍 Found .stmt case with type: \(type(of: stmt))")
+                print("⚠️ Statement (not expression) type: \(type(of: stmt))")
+                // For now, let's see what other statement types we encounter
+            @unknown default:
+                print("⚠️ Unknown CodeBlockItemSyntax.Item case: \(statement.item)")
             }
         }
 
@@ -61,21 +80,32 @@ class DAGParser {
         // Process the final expression
         let expr: ExprSyntax
 
-        if let exprStatement = expressionStatement,
-           let foundExpr = exprStatement.item.as(ExprSyntax.self) {
+        if let exprStatement = expressionStatement {
             print("⏯ Now processing final expression...")
-            print("✅ Successfully parsed expression from multi-statement source")
-            expr = foundExpr
+            // Extract the actual ExprSyntax from the CodeBlockItemSyntax.Item
+            switch exprStatement.item {
+            case let .expr(foundExpr):
+                print("✅ Successfully extracted ExprSyntax from .expr case")
+                expr = foundExpr
+            default:
+                print("❌ Expression statement is not actually an .expr case")
+                return nil
+            }
         } else {
             // Fallback: if no separate expression, try single statement as expression
-            guard let firstStatement = sourceFile.statements.first,
-                  let foundExpr = firstStatement.item.as(ExprSyntax.self) else {
-                print("❌ Failed to extract expression from source")
+            guard let firstStatement = sourceFile.statements.first else {
+                print("❌ No statements found in source")
                 return nil
             }
 
-            print("✅ Successfully parsed single statement as ExprSyntax")
-            expr = foundExpr
+            switch firstStatement.item {
+            case let .expr(foundExpr):
+                print("✅ Successfully parsed single statement as ExprSyntax")
+                expr = foundExpr
+            default:
+                print("❌ First statement is not an expression")
+                return nil
+            }
         }
 
         print("📊 Expression type: \(type(of: expr))")
