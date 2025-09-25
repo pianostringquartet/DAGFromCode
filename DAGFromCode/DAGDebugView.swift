@@ -31,34 +31,125 @@ struct DAGDebugView: View {
                     Spacer()
 
                     Menu("Examples") {
-                        Button("Simple Addition") {
-                            sourceCode = """
-                            let x = 8
-                            let y = 8
-                            x + y
-                            """
+                        Menu("Basic") {
+                            Button("Simple Addition") {
+                                sourceCode = """
+                                let x = 8
+                                let y = 8
+                                x + y
+                                """
+                            }
+
+                            Button("Nested Functions") {
+                                sourceCode = """
+                                sin(sqrt(4))
+                                """
+                            }
+
+                            Button("Complex Expression") {
+                                sourceCode = """
+                                let a = 4
+                                let b = 9
+                                sin(a + b)
+                                """
+                            }
+
+                            Button("Multiple Operations") {
+                                sourceCode = """
+                                var x = 10
+                                let y = 5
+                                cos(x - y)
+                                """
+                            }
                         }
 
-                        Button("Nested Functions") {
-                            sourceCode = """
-                            sin(sqrt(4))
-                            """
+                        Divider()
+
+                        Menu("Ternary Expressions") {
+                            Button("Simple Ternary") {
+                                sourceCode = """
+                                true ? 5 : 10
+                                """
+                            }
+
+                            Button("Comparison Ternary") {
+                                sourceCode = """
+                                5 > 4 ? 100 : 0
+                                """
+                            }
+
+                            Button("Variable Ternary") {
+                                sourceCode = """
+                                let x = 8
+                                let y = 12
+                                x > y ? x : y
+                                """
+                            }
+
+                            Button("Nested Ternary") {
+                                sourceCode = """
+                                true ? (false ? 1 : 2) : 3
+                                """
+                            }
                         }
 
-                        Button("Complex Expression") {
-                            sourceCode = """
-                            let a = 4
-                            let b = 9
-                            sin(a + b)
-                            """
+                        Divider()
+
+                        Menu("If-Else Expressions") {
+                            Button("Simple If-Else") {
+                                sourceCode = """
+                                if true { 5 } else { 10 }
+                                """
+                            }
+
+                            Button("Comparison If-Else") {
+                                sourceCode = """
+                                if 5 > 4 { 100 } else { 0 }
+                                """
+                            }
+
+                            Button("Variable If-Else") {
+                                sourceCode = """
+                                let x = 8
+                                let y = 12
+                                if x > y { x } else { y }
+                                """
+                            }
+
+                            Button("Nested If-Else") {
+                                sourceCode = """
+                                if true {
+                                    if false { 1 } else { 2 }
+                                } else {
+                                    3
+                                }
+                                """
+                            }
                         }
 
-                        Button("Multiple Operations") {
-                            sourceCode = """
-                            var x = 10
-                            let y = 5
-                            cos(x - y)
-                            """
+                        Divider()
+
+                        Menu("Method Chaining") {
+                            Button("Rounded") {
+                                sourceCode = """
+                                let x = 3.7
+                                x.rounded()
+                                """
+                            }
+
+                            Button("Magnitude") {
+                                sourceCode = """
+                                let x = -5.0
+                                x.magnitude
+                                """
+                            }
+
+                            Button("Chained Methods") {
+                                sourceCode = """
+                                let x = -3.7
+                                x.magnitude.rounded()
+                                """
+                            }
                         }
                     }
                     .menuStyle(.borderedButton)
