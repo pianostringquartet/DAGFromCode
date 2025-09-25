@@ -586,6 +586,106 @@ private class DAGBuilderVisitor: SyntaxVisitor {
         return .skipChildren
     }
 
+    override func visit(_ node: IfExprSyntax) -> SyntaxVisitorContinueKind {
+        print("\(indent())🔄 Visiting IfExprSyntax: \(node)")
+
+        // Extract condition - should be first item in conditions array
+        guard let condition = node.conditions.first else {
+            print("\(indent())❌ No condition found in if statement")
+            return .skipChildren
+        }
+
+        // Process condition
+        print("\(indent())  🔍 Processing if condition: \(condition)")
+        walk(condition)
+
+        // Process else body (false value)
+        if let elseBody = node.elseBody {
+            print("\(indent())  ❌ Processing else body: \(elseBody)")
+            walkCodeBlock(elseBody)
+        } else {
+            print("\(indent())❌ No else clause found - if-else is required for DAG")
+            return .skipChildren
+        }
+
+        // Process if body (true value)
+        print("\(indent())  ✅ Processing if body: \(node.body)")
+        walkCodeBlock(node.body)
+
+        // Now we should have 3 items on the stack: [condition, falseValue, trueValue]
+        guard nodeStack.count >= 3 else {
+            print("\(indent())❌ Not enough operands for if-else operation. Stack size: \(nodeStack.count)")
+            return .skipChildren
+        }
+
+        // Pop the three values from stack (in reverse order since stack is LIFO)
+        let trueValueNodeId = nodeStack.removeLast()  // port 2
+        let falseValueNodeId = nodeStack.removeLast() // port 1
+        let conditionNodeId = nodeStack.removeLast()  // port 0
+
+        print("\(indent())⚡ Processing if-else operation: if \(String(conditionNodeId.uuidString.prefix(8))) { \(String(trueValueNodeId.uuidString.prefix(8))) } else { \(String(falseValueNodeId.uuidString.prefix(8))) }")
+
+        // Create the OptionPicker node (same logic as ternary)
+        let nodeId = UUID()
+        let conditionInputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
+        let falseInputCoord = InputCoordinate(nodeId: nodeId, portId: 1)
+        let trueInputCoord = InputCoordinate(nodeId: nodeId, portId: 2)
+
+        let conditionInput = NodeInput(
+            id: conditionInputCoord,
+            input: .incomingEdge(from: OutputCoordinate(nodeId: conditionNodeId, portId: 0))
+        )
+
+        let falseInput = NodeInput(
+            id: falseInputCoord,
+            input: .incomingEdge(from: OutputCoordinate(nodeId: falseValueNodeId, portId: 0))
+        )
+
+        let trueInput = NodeInput(
+            id: trueInputCoord,
+            input: .incomingEdge(from: OutputCoordinate(nodeId: trueValueNodeId, portId: 0))
+        )
+
+        let output = NodeOutput(id: OutputCoordinate(nodeId: nodeId, portId: 0), value: 0.0)
+
+        let dagNode = DAGNode(
+            nodeId: nodeId,
+            kind: .optionPicker,
+            inputs: [conditionInput, falseInput, trueInput],
+            output: output
+        )
+
+        nodes.append(dagNode)
+        print("\(indent())✅ Created OptionPicker DAGNode from if-else: \(String(nodeId.uuidString.prefix(8)))")
+
+        // Set as root and add to stack
+        rootNodeId = nodeId
+        nodeStack.append(nodeId)
+
+        print("\(indent())👑 Set root node ID: \(String(nodeId.uuidString.prefix(8)))")
+        print("\(indent())📚 Final stack after if-else operation: \(nodeStack.map { String($0.uuidString.prefix(8)) })")
+
+        return .skipChildren
+    }
+
+    // Helper method to extract expression from code block
+    private func walkCodeBlock(_ codeBlock: SyntaxProtocol) {
+        print("\(indent())🧱 Walking code block: \(codeBlock)")
+
+        // Handle different types of code blocks/statements
+        if let codeBlockSyntax = codeBlock.as(CodeBlockSyntax.self) {
+            // Extract single expression from code block statements
+            if let firstStatement = codeBlockSyntax.statements.first {
+                print("\(indent())📝 Processing first statement in code block: \(firstStatement)")
+                walk(firstStatement)
+            }
+        } else {
+            // Direct expression (fallback)
+            print("\(indent())📝 Processing direct expression: \(codeBlock)")
+            walk(codeBlock)
+        }
+    }
+
     private func createValueNode(_ value: Double) -> UUID {
         let nodeId = UUID()
         print("\(indent())💎 Creating ValueNode with value: \(value), ID: \(String(nodeId.uuidString.prefix(8)))")

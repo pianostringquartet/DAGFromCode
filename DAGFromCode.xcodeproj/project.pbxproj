@@ -29,19 +29,11 @@
 			remoteGlobalIDString = ECAAAEAF2E843F6100E73632;
 			remoteInfo = DAGFromCode;
 		};
-		ECAAAEC92E843F6400E73632 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = ECAAAEA82E843F6100E73632 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = ECAAAEAF2E843F6100E73632;
-			remoteInfo = DAGFromCode;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		ECAAAEB02E843F6100E73632 /* DAGFromCode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DAGFromCode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		ECAAAEBE2E843F6400E73632 /* DAGFromCodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DAGFromCodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		ECAAAEC82E843F6400E73632 /* DAGFromCodeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DAGFromCodeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -53,11 +45,6 @@
 		ECAAAEC12E843F6400E73632 /* DAGFromCodeTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = DAGFromCodeTests;
-			sourceTree = "<group>";
-		};
-		ECAAAECB2E843F6400E73632 /* DAGFromCodeUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = DAGFromCodeUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -89,13 +76,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		ECAAAEC52E843F6400E73632 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -104,7 +84,6 @@
 			children = (
 				ECAAAEB22E843F6100E73632 /* DAGFromCode */,
 				ECAAAEC12E843F6400E73632 /* DAGFromCodeTests */,
-				ECAAAECB2E843F6400E73632 /* DAGFromCodeUITests */,
 				ECAAAEB12E843F6100E73632 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -114,7 +93,6 @@
 			children = (
 				ECAAAEB02E843F6100E73632 /* DAGFromCode.app */,
 				ECAAAEBE2E843F6400E73632 /* DAGFromCodeTests.xctest */,
-				ECAAAEC82E843F6400E73632 /* DAGFromCodeUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -179,29 +157,6 @@
 			productReference = ECAAAEBE2E843F6400E73632 /* DAGFromCodeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		ECAAAEC72E843F6400E73632 /* DAGFromCodeUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = ECAAAED82E843F6400E73632 /* Build configuration list for PBXNativeTarget "DAGFromCodeUITests" */;
-			buildPhases = (
-				ECAAAEC42E843F6400E73632 /* Sources */,
-				ECAAAEC52E843F6400E73632 /* Frameworks */,
-				ECAAAEC62E843F6400E73632 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				ECAAAECA2E843F6400E73632 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				ECAAAECB2E843F6400E73632 /* DAGFromCodeUITests */,
-			);
-			name = DAGFromCodeUITests;
-			packageProductDependencies = (
-			);
-			productName = DAGFromCodeUITests;
-			productReference = ECAAAEC82E843F6400E73632 /* DAGFromCodeUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -216,10 +171,6 @@
 						CreatedOnToolsVersion = 16.4;
 					};
 					ECAAAEBD2E843F6400E73632 = {
-						CreatedOnToolsVersion = 16.4;
-						TestTargetID = ECAAAEAF2E843F6100E73632;
-					};
-					ECAAAEC72E843F6400E73632 = {
 						CreatedOnToolsVersion = 16.4;
 						TestTargetID = ECAAAEAF2E843F6100E73632;
 					};
@@ -245,7 +196,6 @@
 			targets = (
 				ECAAAEAF2E843F6100E73632 /* DAGFromCode */,
 				ECAAAEBD2E843F6400E73632 /* DAGFromCodeTests */,
-				ECAAAEC72E843F6400E73632 /* DAGFromCodeUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -259,13 +209,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		ECAAAEBC2E843F6400E73632 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		ECAAAEC62E843F6400E73632 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -289,13 +232,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		ECAAAEC42E843F6400E73632 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -303,11 +239,6 @@
 			isa = PBXTargetDependency;
 			target = ECAAAEAF2E843F6100E73632 /* DAGFromCode */;
 			targetProxy = ECAAAEBF2E843F6400E73632 /* PBXContainerItemProxy */;
-		};
-		ECAAAECA2E843F6400E73632 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = ECAAAEAF2E843F6100E73632 /* DAGFromCode */;
-			targetProxy = ECAAAEC92E843F6400E73632 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -558,50 +489,6 @@
 			};
 			name = Release;
 		};
-		ECAAAED92E843F6400E73632 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 57798878NB;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
-				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.stitch.DAGFromCodeUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
-				TEST_TARGET_NAME = DAGFromCode;
-				XROS_DEPLOYMENT_TARGET = 2.5;
-			};
-			name = Debug;
-		};
-		ECAAAEDA2E843F6400E73632 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 57798878NB;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
-				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.stitch.DAGFromCodeUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
-				TEST_TARGET_NAME = DAGFromCode;
-				XROS_DEPLOYMENT_TARGET = 2.5;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -628,15 +515,6 @@
 			buildConfigurations = (
 				ECAAAED62E843F6400E73632 /* Debug */,
 				ECAAAED72E843F6400E73632 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		ECAAAED82E843F6400E73632 /* Build configuration list for PBXNativeTarget "DAGFromCodeUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				ECAAAED92E843F6400E73632 /* Debug */,
-				ECAAAEDA2E843F6400E73632 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
