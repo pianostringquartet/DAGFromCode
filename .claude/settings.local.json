@@ -10,7 +10,8 @@
       "WebFetch(domain:swift-ast-explorer.com)",
       "Read(//Users/christianjclampitt/Desktop/**)",
       "Bash(cd:*)",
-      "Bash(swift test:*)"
+      "Bash(swift test:*)",
+      "Bash(swiftc:*)"
     ],
     "deny": [],
     "ask": []

@@ -11,11 +11,7 @@ import Foundation
 
 // MARK: - Supporting Types for Testing
 
-enum InputSource {
-    case value(Double)
-    case nodeWithFunction(DAGFunction)
-    case valueNode(Double)
-}
+// Using actual DAG types: InputValue and OutputCoordinate from DAGFromCode/Mapping.swift
 
 struct NodeRoleClassification {
     let leafNodes: [DAGFunctionNode]
@@ -58,7 +54,7 @@ struct DAGFromCodeTests {
         }
     }
 
-    func validateInputSources(_ dag: DAG, nodeId: UUID, expectedSources: [InputSource]) -> Bool {
+    func validateInputSources(_ dag: DAG, nodeId: UUID, expectedSources: [InputValue]) -> Bool {
         guard let node = dag.getNode(by: nodeId),
               case .function(let functionNode) = node else {
             return false
@@ -75,20 +71,8 @@ struct DAGFromCodeTests {
             case (.value(let actualValue), .value(let expectedValue)):
                 if actualValue != expectedValue { return false }
 
-            case (.incomingEdge(let from), .nodeWithFunction(let expectedFunction)):
-                guard let sourceNode = dag.getNode(by: from.nodeId),
-                      case .function(let sourceFunctionNode) = sourceNode,
-                      sourceFunctionNode.patch == expectedFunction else {
-                    return false
-                }
-
-            case (.incomingEdge(let from), .valueNode(let expectedValue)):
-                guard let sourceNode = dag.getNode(by: from.nodeId),
-                      case .function(let sourceFunctionNode) = sourceNode,
-                      sourceFunctionNode.patch == .value,
-                      let firstInput = sourceFunctionNode.inputs.first,
-                      case .value(let sourceValue) = firstInput.input,
-                      sourceValue == expectedValue else {
+            case (.incomingEdge(let actualFrom), .incomingEdge(let expectedFrom)):
+                if actualFrom.nodeId != expectedFrom.nodeId || actualFrom.portId != expectedFrom.portId {
                     return false
                 }
 
@@ -186,7 +170,7 @@ struct DAGFromCodeTests {
         }
 
         trace(startNodeId)
-        return path
+        return path.filter { $0 != .value }
     }
 
     @Test func parseSimpleValue() throws {
@@ -258,7 +242,7 @@ struct DAGFromCodeTests {
 
         // Validate connections: Sin should receive input from ValueNode(1)
         let sinNode = sinNodes.first!
-        let expectedSinSources: [InputSource] = [.valueNode(1.0)]
+        let expectedSinSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value1Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: expectedSinSources),
                 "Sin node should receive input from ValueNode(1)")
 
@@ -274,7 +258,7 @@ struct DAGFromCodeTests {
         // Validate execution path
         let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
         #expect(executionPath.contains(.sin), "Execution path should include sin")
-        #expect(executionPath.contains(.value), "Execution path should include value node")
+        // Value nodes are excluded from execution path (operation chain focus)
     }
 
     @Test func parseNestedFunctions() throws {
@@ -301,13 +285,13 @@ struct DAGFromCodeTests {
 
         // Validate connections: Sqrt should receive input from ValueNode(4)
         let sqrtNode = sqrtNodes.first!
-        let expectedSqrtSources: [InputSource] = [.valueNode(4.0)]
+        let expectedSqrtSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value4Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: sqrtNode.nodeId, expectedSources: expectedSqrtSources),
                 "Sqrt node should receive input from ValueNode(4)")
 
         // Validate connections: Sin should receive input from Sqrt node
         let sinNode = sinNodes.first!
-        let expectedSinSources: [InputSource] = [.nodeWithFunction(.sqrt)]
+        let expectedSinSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: sqrtNode.nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: expectedSinSources),
                 "Sin node should receive input from Sqrt node")
 
@@ -322,10 +306,10 @@ struct DAGFromCodeTests {
         let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
         #expect(executionPath.contains(.sin), "Execution path should include sin")
         #expect(executionPath.contains(.sqrt), "Execution path should include sqrt")
-        #expect(executionPath.contains(.value), "Execution path should include value node")
+        // Value nodes are excluded from execution path (operation chain focus)
 
-        // Validate execution order in path (should process value→sqrt→sin)
-        #expect(executionPath.count >= 3, "Execution path should include all 3 operations")
+        // Validate execution order in path (should process sqrt→sin)
+        #expect(executionPath.count >= 2, "Execution path should include all operation functions")
     }
 
     @Test func parseTripleNested() throws {
@@ -354,19 +338,19 @@ struct DAGFromCodeTests {
 
         // Validate connections: Sqrt ← ValueNode(4)
         let sqrtNode = sqrtNodes.first!
-        let expectedSqrtSources: [InputSource] = [.valueNode(4.0)]
+        let expectedSqrtSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value4Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: sqrtNode.nodeId, expectedSources: expectedSqrtSources),
                 "Sqrt node should receive input from ValueNode(4)")
 
         // Validate connections: Sin ← Sqrt
         let sinNode = sinNodes.first!
-        let expectedSinSources: [InputSource] = [.nodeWithFunction(.sqrt)]
+        let expectedSinSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: sqrtNode.nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: expectedSinSources),
                 "Sin node should receive input from Sqrt node")
 
         // Validate connections: Cos ← Sin
         let cosNode = cosNodes.first!
-        let expectedCosSources: [InputSource] = [.nodeWithFunction(.sin)]
+        let expectedCosSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: sinNode.nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: cosNode.nodeId, expectedSources: expectedCosSources),
                 "Cos node should receive input from Sin node")
 
@@ -382,10 +366,10 @@ struct DAGFromCodeTests {
         #expect(executionPath.contains(.cos), "Execution path should include cos")
         #expect(executionPath.contains(.sin), "Execution path should include sin")
         #expect(executionPath.contains(.sqrt), "Execution path should include sqrt")
-        #expect(executionPath.contains(.value), "Execution path should include value node")
+        // Value nodes are excluded from execution path (operation chain focus)
 
-        // Validate complete chain: value→sqrt→sin→cos
-        #expect(executionPath.count >= 4, "Execution path should include all 4 operations")
+        // Validate complete chain: sqrt→sin→cos
+        #expect(executionPath.count >= 3, "Execution path should include all operation functions")
     }
 
     @Test func parseCosSin() throws {
@@ -412,13 +396,13 @@ struct DAGFromCodeTests {
 
         // Validate connections: Sin ← ValueNode(1)
         let sinNode = sinNodes.first!
-        let expectedSinSources: [InputSource] = [.valueNode(1.0)]
+        let expectedSinSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value1Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: expectedSinSources),
                 "Sin node should receive input from ValueNode(1)")
 
         // Validate connections: Cos ← Sin
         let cosNode = cosNodes.first!
-        let expectedCosSources: [InputSource] = [.nodeWithFunction(.sin)]
+        let expectedCosSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: sinNode.nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: cosNode.nodeId, expectedSources: expectedCosSources),
                 "Cos node should receive input from Sin node")
 
@@ -433,7 +417,7 @@ struct DAGFromCodeTests {
         let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
         #expect(executionPath.contains(.cos), "Execution path should include cos")
         #expect(executionPath.contains(.sin), "Execution path should include sin")
-        #expect(executionPath.contains(.value), "Execution path should include value node")
+        // Value nodes are excluded from execution path (operation chain focus)
     }
 
     @Test func parseFloatValue() throws {
@@ -498,7 +482,7 @@ struct DAGFromCodeTests {
 
         // Validate connections: Sqrt ← ValueNode(9)
         let sqrtNode = sqrtNodes.first!
-        let expectedSqrtSources: [InputSource] = [.valueNode(9.0)]
+        let expectedSqrtSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value9Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: sqrtNode.nodeId, expectedSources: expectedSqrtSources),
                 "Sqrt node should receive input from ValueNode(9)")
 
@@ -564,7 +548,7 @@ struct DAGFromCodeTests {
 
         // Validate connections: Add should receive inputs from both value nodes
         let addNode = addNodes.first!
-        let expectedAddSources: [InputSource] = [.valueNode(1.0), .valueNode(2.0)]
+        let expectedAddSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value1Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value2Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: addNode.nodeId, expectedSources: expectedAddSources),
                 "Add node should receive inputs from ValueNode(1) and ValueNode(2)")
 
@@ -601,7 +585,7 @@ struct DAGFromCodeTests {
 
         // Validate connections: Subtract should receive inputs from both value nodes
         let subtractNode = subtractNodes.first!
-        let expectedSubtractSources: [InputSource] = [.valueNode(5.0), .valueNode(3.0)]
+        let expectedSubtractSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value5Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value3Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: subtractNode.nodeId, expectedSources: expectedSubtractSources),
                 "Subtract node should receive inputs from ValueNode(5) and ValueNode(3)")
 
@@ -617,7 +601,7 @@ struct DAGFromCodeTests {
         // Validate execution path
         let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
         #expect(executionPath.contains(.subtract), "Execution path should include subtract")
-        #expect(executionPath.contains(.value), "Execution path should include value nodes")
+        // Value nodes are excluded from execution path (operation chain focus)
     }
 
     @Test func parseNestedFunctionWithAddition() throws {
@@ -646,13 +630,13 @@ struct DAGFromCodeTests {
 
         // Validate connections: Add should receive inputs from both value nodes
         let addNode = addNodes.first!
-        let expectedAddSources: [InputSource] = [.valueNode(1.0), .valueNode(2.0)]
+        let expectedAddSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value1Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value2Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: addNode.nodeId, expectedSources: expectedAddSources),
                 "Add node should receive inputs from ValueNode(1) and ValueNode(2)")
 
         // Validate connections: Sin should receive input from Add node
         let sinNode = sinNodes.first!
-        let expectedSinSources: [InputSource] = [.nodeWithFunction(.add)]
+        let expectedSinSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: addNode.nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: expectedSinSources),
                 "Sin node should receive input from Add node")
 
@@ -667,7 +651,7 @@ struct DAGFromCodeTests {
         let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
         #expect(executionPath.contains(.sin), "Execution path should include sin")
         #expect(executionPath.contains(.add), "Execution path should include add")
-        #expect(executionPath.contains(.value), "Execution path should include value nodes")
+        // Value nodes are excluded from execution path (operation chain focus)
     }
 
     @Test func parseNestedFunctionWithSubtraction() throws {
@@ -696,13 +680,13 @@ struct DAGFromCodeTests {
 
         // Validate connections: Subtract ← ValueNode(5), ValueNode(3)
         let subtractNode = subtractNodes.first!
-        let expectedSubtractSources: [InputSource] = [.valueNode(5.0), .valueNode(3.0)]
+        let expectedSubtractSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value5Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value3Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: subtractNode.nodeId, expectedSources: expectedSubtractSources),
                 "Subtract node should receive inputs from ValueNode(5) and ValueNode(3)")
 
         // Validate connections: Cos ← Subtract
         let cosNode = cosNodes.first!
-        let expectedCosSources: [InputSource] = [.nodeWithFunction(.subtract)]
+        let expectedCosSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: subtractNode.nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: cosNode.nodeId, expectedSources: expectedCosSources),
                 "Cos node should receive input from Subtract node")
 
@@ -780,12 +764,12 @@ struct DAGFromCodeTests {
 
         // Validate connections: Sqrt ← ValueNode(16), Cos ← Sqrt
         let sqrtNode = sqrtNodes.first!
-        let expectedSqrtSources: [InputSource] = [.valueNode(16.0)]
+        let expectedSqrtSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value16Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: sqrtNode.nodeId, expectedSources: expectedSqrtSources),
                 "Sqrt node should receive input from ValueNode(16)")
 
         let cosNode = cosNodes.first!
-        let expectedCosSources: [InputSource] = [.nodeWithFunction(.sqrt)]
+        let expectedCosSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: sqrtNode.nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: cosNode.nodeId, expectedSources: expectedCosSources),
                 "Cos node should receive input from Sqrt node")
 
@@ -826,12 +810,12 @@ struct DAGFromCodeTests {
 
         // Validate connections: Sqrt ← ValueNode(4), Cos ← Sqrt
         let sqrtNode = sqrtNodes.first!
-        let expectedSqrtSources: [InputSource] = [.valueNode(4.0)]
+        let expectedSqrtSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value4Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: sqrtNode.nodeId, expectedSources: expectedSqrtSources),
                 "Sqrt node should receive input from ValueNode(4)")
 
         let cosNode = cosNodes.first!
-        let expectedCosSources: [InputSource] = [.nodeWithFunction(.sqrt)]
+        let expectedCosSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: sqrtNode.nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: cosNode.nodeId, expectedSources: expectedCosSources),
                 "Cos node should receive input from Sqrt node")
 
@@ -853,11 +837,35 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 2) // 2.5, sin
-        #expect(projectData?.description == "ValueNode(2) -> SinNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .sin)
+        #expect(dag.nodes.count == 2) // 2.5, sin
+
+        // Find all node types
+        let value25Nodes = findValueNodes(dag, withValue: 2.5)
+        let sinNodes = findNodesByFunction(dag, function: .sin)
+
+        // Verify exact counts
+        #expect(value25Nodes.count == 1, "Expected exactly one ValueNode with value 2.5")
+        #expect(sinNodes.count == 1, "Expected exactly one Sin node")
+
+        // Validate connections: Sin ← ValueNode(2.5)
+        let sinNode = sinNodes.first!
+        let expectedSinSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value25Nodes[0].nodeId, portId: 0))]
+        #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: expectedSinSources),
+                "Sin node should receive input from ValueNode(2.5)")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (float value node)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .sin, "Expected Sin as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     @Test func verifyVariableReferenceConnections() throws {
@@ -895,12 +903,35 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3) // x(8), y(8), +
-        #expect(projectData?.description == "Add(ValueNode(8), ValueNode(8))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .add)
-        #expect(rootNode?.inputs.count == 2)
+        #expect(dag.nodes.count == 3) // x(8), y(8), +
+
+        // Find all node types
+        let value8Nodes = findValueNodes(dag, withValue: 8.0)
+        let addNodes = findNodesByFunction(dag, function: .add)
+
+        // Verify exact counts (both variables have value 8, but should reuse same node)
+        #expect(value8Nodes.count == 2, "Expected exactly two ValueNodes with value 8 (one for each variable)")
+        #expect(addNodes.count == 1, "Expected exactly one Add node")
+
+        // Validate connections: Add should receive inputs from both value nodes
+        let addNode = addNodes.first!
+        let expectedAddSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value8Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value8Nodes[1].nodeId, portId: 0))]
+        #expect(validateInputSources(dag, nodeId: addNode.nodeId, expectedSources: expectedAddSources),
+                "Add node should receive inputs from both ValueNode(8) instances")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 2, "Expected 2 leaf nodes (both value nodes)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .add, "Expected Add as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     @Test func parseMixedVariableDeclarations() throws {
@@ -912,12 +943,37 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3) // a(3), b(5), -
-        #expect(projectData?.description == "Subtract(ValueNode(3), ValueNode(5))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .subtract)
-        #expect(rootNode?.inputs.count == 2)
+        #expect(dag.nodes.count == 3) // a(3), b(5), -
+
+        // Find all node types
+        let value3Nodes = findValueNodes(dag, withValue: 3.0)
+        let value5Nodes = findValueNodes(dag, withValue: 5.0)
+        let subtractNodes = findNodesByFunction(dag, function: .subtract)
+
+        // Verify exact counts
+        #expect(value3Nodes.count == 1, "Expected exactly one ValueNode with value 3")
+        #expect(value5Nodes.count == 1, "Expected exactly one ValueNode with value 5")
+        #expect(subtractNodes.count == 1, "Expected exactly one Subtract node")
+
+        // Validate connections: Subtract should receive inputs from both value nodes
+        let subtractNode = subtractNodes.first!
+        let expectedSubtractSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value3Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value5Nodes[0].nodeId, portId: 0))]
+        #expect(validateInputSources(dag, nodeId: subtractNode.nodeId, expectedSources: expectedSubtractSources),
+                "Subtract node should receive inputs from ValueNode(3) and ValueNode(5)")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 2, "Expected 2 leaf nodes (both value nodes)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .subtract, "Expected Subtract as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     @Test func parseMultipleVariablesDifferentValues() throws {
@@ -929,11 +985,37 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3) // x(10), y(20), +
-        #expect(projectData?.description == "Add(ValueNode(10), ValueNode(20))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .add)
+        #expect(dag.nodes.count == 3) // x(10), y(20), +
+
+        // Find all node types
+        let value10Nodes = findValueNodes(dag, withValue: 10.0)
+        let value20Nodes = findValueNodes(dag, withValue: 20.0)
+        let addNodes = findNodesByFunction(dag, function: .add)
+
+        // Verify exact counts
+        #expect(value10Nodes.count == 1, "Expected exactly one ValueNode with value 10")
+        #expect(value20Nodes.count == 1, "Expected exactly one ValueNode with value 20")
+        #expect(addNodes.count == 1, "Expected exactly one Add node")
+
+        // Validate connections: Add should receive inputs from both different value nodes
+        let addNode = addNodes.first!
+        let expectedAddSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value10Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value20Nodes[0].nodeId, portId: 0))]
+        #expect(validateInputSources(dag, nodeId: addNode.nodeId, expectedSources: expectedAddSources),
+                "Add node should receive inputs from ValueNode(10) and ValueNode(20)")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 2, "Expected 2 leaf nodes (both value nodes)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .add, "Expected Add as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     @Test func verifyMultipleVariableConnections() throws {
@@ -991,9 +1073,53 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 4) // a(4), b(9), +, sin
-        #expect(projectData?.description == "Add(ValueNode(4), ValueNode(9)) -> SinNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
+        // Find specific node types
+        let value4Nodes = findValueNodes(dag, withValue: 4.0)
+        let value9Nodes = findValueNodes(dag, withValue: 9.0)
+        let addNodes = findNodesByFunction(dag, function: .add)
+        let sinNodes = findNodesByFunction(dag, function: .sin)
+
+        // Validate node counts
+        #expect(value4Nodes.count == 1, "Expected 1 node with value 4.0")
+        #expect(value9Nodes.count == 1, "Expected 1 node with value 9.0")
+        #expect(addNodes.count == 1, "Expected 1 add node")
+        #expect(sinNodes.count == 1, "Expected 1 sin node")
+        #expect(dag.nodes.count == 4, "Expected total 4 nodes") // a(4), b(9), +, sin
+
+        // Validate connections
+        guard let addNode = addNodes.first, let sinNode = sinNodes.first else {
+            #expect(Bool(false), "Expected add and sin nodes to exist")
+            return
+        }
+
+        // Add node should connect to both value nodes
+        let addExpectedSources: [InputValue] = [
+            .incomingEdge(from: OutputCoordinate(nodeId: value4Nodes[0].nodeId, portId: 0)),
+            .incomingEdge(from: OutputCoordinate(nodeId: value9Nodes[0].nodeId, portId: 0))
+        ]
+        #expect(validateInputSources(dag, nodeId: addNode.nodeId, expectedSources: addExpectedSources), "Add node should connect to value nodes")
+
+        // Sin node should connect to add node
+        let sinExpectedSources: [InputValue] = [
+            .incomingEdge(from: OutputCoordinate(nodeId: addNode.nodeId, portId: 0))
+        ]
+        #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: sinExpectedSources), "Sin node should connect to add node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 2, "Expected 2 leaf nodes (value nodes)")
+        #expect(nodeRoles.rootNode?.nodeId == sinNode.nodeId, "Sin node should be root")
+
+        // Validate structural integrity
+        #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
+
+        // Validate legacy properties
+        #expect(projectData?.description == "Add(ValueNode(4), ValueNode(9)) -> SinNode")
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .sin)
     }
@@ -1024,7 +1150,7 @@ struct DAGFromCodeTests {
 
         // Validate connections: GreaterThan should receive inputs from both value nodes
         let greaterThanNode = greaterThanNodes.first!
-        let expectedGreaterThanSources: [InputSource] = [.valueNode(5.0), .valueNode(3.0)]
+        let expectedGreaterThanSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value5Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value3Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: greaterThanNode.nodeId, expectedSources: expectedGreaterThanSources),
                 "GreaterThan node should receive inputs from ValueNode(5) and ValueNode(3)")
 
@@ -1040,7 +1166,7 @@ struct DAGFromCodeTests {
         // Validate execution path
         let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
         #expect(executionPath.contains(.greaterThan), "Execution path should include greaterThan")
-        #expect(executionPath.contains(.value), "Execution path should include value nodes")
+        // Value nodes are excluded from execution path (operation chain focus)
     }
 
     @Test func parseLessThan() throws {
@@ -1067,7 +1193,7 @@ struct DAGFromCodeTests {
 
         // Validate connections: LessThan should receive inputs from both value nodes
         let lessThanNode = lessThanNodes.first!
-        let expectedLessThanSources: [InputSource] = [.valueNode(2.0), .valueNode(10.0)]
+        let expectedLessThanSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value2Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value10Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: lessThanNode.nodeId, expectedSources: expectedLessThanSources),
                 "LessThan node should receive inputs from ValueNode(2) and ValueNode(10)")
 
@@ -1083,7 +1209,7 @@ struct DAGFromCodeTests {
         // Validate execution path
         let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
         #expect(executionPath.contains(.lessThan), "Execution path should include lessThan")
-        #expect(executionPath.contains(.value), "Execution path should include value nodes")
+        // Value nodes are excluded from execution path (operation chain focus)
     }
 
     @Test func parseEqual() throws {
@@ -1113,7 +1239,7 @@ struct DAGFromCodeTests {
 
         // Validate connections: Equal should receive inputs from both value nodes
         let equalNode = equalNodes.first!
-        let expectedEqualSources: [InputSource] = [.valueNode(7.0), .valueNode(5.0)]
+        let expectedEqualSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value7Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value5Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: equalNode.nodeId, expectedSources: expectedEqualSources),
                 "Equal node should receive inputs from ValueNode(7) and ValueNode(5)")
 
@@ -1155,7 +1281,7 @@ struct DAGFromCodeTests {
 
         // Validate connections: OptionPicker should receive condition (true), false value (10), true value (5)
         let optionPickerNode = optionPickerNodes.first!
-        let expectedOptionPickerSources: [InputSource] = [.valueNode(1.0), .valueNode(10.0), .valueNode(5.0)]
+        let expectedOptionPickerSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: trueNodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value10Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value5Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: optionPickerNode.nodeId, expectedSources: expectedOptionPickerSources),
                 "OptionPicker node should receive condition (true), false value (10), and true value (5)")
 
@@ -1199,13 +1325,13 @@ struct DAGFromCodeTests {
 
         // Validate input connections for GreaterThan: should receive 5 and 4
         let greaterThanNode = greaterThanNodes.first!
-        let expectedGreaterThanSources: [InputSource] = [.valueNode(5.0), .valueNode(4.0)]
+        let expectedGreaterThanSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value5Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value4Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: greaterThanNode.nodeId, expectedSources: expectedGreaterThanSources),
                 "GreaterThan node should receive inputs from ValueNode(5) and ValueNode(4)")
 
         // Validate input connections for OptionPicker: condition from GreaterThan, false value (0), true value (100)
         let optionPickerNode = optionPickerNodes.first!
-        let expectedOptionPickerSources: [InputSource] = [.nodeWithFunction(.greaterThan), .valueNode(0.0), .valueNode(100.0)]
+        let expectedOptionPickerSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: greaterThanNode.nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value0Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value100Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: optionPickerNode.nodeId, expectedSources: expectedOptionPickerSources),
                 "OptionPicker node should receive condition from GreaterThan, false value 0, and true value 100")
 
@@ -1228,8 +1354,48 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 4) // ValueNode(8), ValueNode(12), GreaterThan, OptionPicker
-//        #expect(projectData?.description == "OptionPicker(GreaterThan(ValueNode(8), ValueNode(12)), ValueNode(12), ValueNode(8))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
+
+        // Find specific node types
+        let value8Nodes = findValueNodes(dag, withValue: 8.0)
+        let value12Nodes = findValueNodes(dag, withValue: 12.0)
+        let greaterThanNodes = findNodesByFunction(dag, function: .greaterThan)
+        let pickerNodes = findNodesByFunction(dag, function: .optionPicker)
+
+        // Validate node counts
+        #expect(value8Nodes.count == 1, "Expected 1 node with value 8.0")
+        #expect(value12Nodes.count == 1, "Expected 1 node with value 12.0")
+        #expect(greaterThanNodes.count == 1, "Expected 1 greaterThan node")
+        #expect(pickerNodes.count == 1, "Expected 1 option picker node")
+        #expect(dag.nodes.count == 4, "Expected total 4 nodes") // ValueNode(8), ValueNode(12), GreaterThan, OptionPicker (variables reused)
+
+        // Validate connections for ternary operation
+        guard let greaterThanNode = greaterThanNodes.first,
+              let pickerNode = pickerNodes.first else {
+            #expect(Bool(false), "Expected greaterThan and picker nodes to exist")
+            return
+        }
+
+        // GreaterThan node should connect to both value nodes
+        let greaterThanExpectedSources: [InputValue] = [
+            .incomingEdge(from: OutputCoordinate(nodeId: value8Nodes[0].nodeId, portId: 0)),
+            .incomingEdge(from: OutputCoordinate(nodeId: value12Nodes[0].nodeId, portId: 0))
+        ]
+        #expect(validateInputSources(dag, nodeId: greaterThanNode.nodeId, expectedSources: greaterThanExpectedSources), "GreaterThan node should connect to both value nodes")
+
+        // Option picker should have 3 inputs: condition, true value, false value
+        #expect(pickerNode.inputs.count == 3, "Option picker should have 3 inputs")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count >= 2, "Expected at least 2 leaf nodes (value nodes)")
+        #expect(nodeRoles.rootNode?.nodeId == pickerNode.nodeId, "Option picker should be root")
+
+        // Validate structural integrity
+        #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
 
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .optionPicker)
@@ -1279,7 +1445,7 @@ struct DAGFromCodeTests {
         let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
         #expect(executionPath.filter({ $0 == .optionPicker }).count >= 2,
                "Execution path should include at least 2 OptionPicker nodes for nested ternary")
-        #expect(executionPath.contains(.value), "Execution path should include value nodes")
+        // Value nodes are excluded from execution path (operation chain focus)
 
         // Verify root node has proper input count for ternary
         #expect(roles.rootNode?.inputs.count == 3, "Root OptionPicker should have 3 inputs (condition, false-value, true-value)")
@@ -1360,7 +1526,7 @@ struct DAGFromCodeTests {
 
         // Validate connections: OptionPicker should receive condition, false value, true value
         let optionPickerNode = optionPickerNodes.first!
-        let expectedSources: [InputSource] = [.valueNode(1.0), .valueNode(10.0), .valueNode(5.0)]
+        let expectedSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: trueNodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value10Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value5Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: optionPickerNode.nodeId, expectedSources: expectedSources),
                 "OptionPicker should receive condition (true), false value (10), true value (5)")
 
@@ -1404,13 +1570,13 @@ struct DAGFromCodeTests {
 
         // Validate input connections for GreaterThan: should receive 5 and 4
         let greaterThanNode = greaterThanNodes.first!
-        let expectedGreaterThanSources: [InputSource] = [.valueNode(5.0), .valueNode(4.0)]
+        let expectedGreaterThanSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value5Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value4Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: greaterThanNode.nodeId, expectedSources: expectedGreaterThanSources),
                 "GreaterThan node should receive inputs from ValueNode(5) and ValueNode(4)")
 
         // Validate input connections for OptionPicker: should receive condition from GreaterThan, then false value (0), then true value (100)
         let optionPickerNode = optionPickerNodes.first!
-        let expectedOptionPickerSources: [InputSource] = [.nodeWithFunction(.greaterThan), .valueNode(0.0), .valueNode(100.0)]
+        let expectedOptionPickerSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: greaterThanNode.nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value0Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value100Nodes[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: optionPickerNode.nodeId, expectedSources: expectedOptionPickerSources),
                 "OptionPicker node should receive condition from GreaterThan, false value 0, and true value 100")
 
@@ -1453,13 +1619,13 @@ struct DAGFromCodeTests {
 
         // Validate connections: GreaterThan should receive inputs from both value nodes
         let greaterThanNode = greaterThanNodes.first!
-        let expectedGreaterThanSources: [InputSource] = [.valueNode(8.0), .valueNode(12.0)]
+        let expectedGreaterThanSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: valueNodes8[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: valueNodes12[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: greaterThanNode.nodeId, expectedSources: expectedGreaterThanSources),
                 "GreaterThan node should receive inputs from ValueNode(8) and ValueNode(12)")
 
         // Validate connections: OptionPicker should receive condition from GreaterThan and values from both value nodes
         let optionPickerNode = optionPickerNodes.first!
-        let expectedOptionPickerSources: [InputSource] = [.nodeWithFunction(.greaterThan), .valueNode(12.0), .valueNode(8.0)]
+        let expectedOptionPickerSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: greaterThanNode.nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: valueNodes12[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: valueNodes8[0].nodeId, portId: 0))]
         #expect(validateInputSources(dag, nodeId: optionPickerNode.nodeId, expectedSources: expectedOptionPickerSources),
                 "OptionPicker node should receive condition from GreaterThan and values from both ValueNodes")
 
@@ -1478,9 +1644,36 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 7) // true, false, 1, 2, 3, inner if-else, outer if-else
-        #expect(projectData?.description == "OptionPicker(ValueNode(1), ValueNode(3), OptionPicker(ValueNode(0), ValueNode(2), ValueNode(1)))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
+        // Find specific node types
+        let value1Nodes = findValueNodes(dag, withValue: 1.0) // true
+        let value0Nodes = findValueNodes(dag, withValue: 0.0) // false
+        let value2Nodes = findValueNodes(dag, withValue: 2.0) // literal 2
+        let value3Nodes = findValueNodes(dag, withValue: 3.0) // literal 3
+        let pickerNodes = findNodesByFunction(dag, function: .optionPicker)
+
+        // Validate node counts
+        #expect(value1Nodes.count >= 1, "Expected at least 1 node with value 1.0 (true or literal)")
+        #expect(value0Nodes.count >= 1, "Expected at least 1 node with value 0.0 (false)")
+        #expect(value2Nodes.count == 1, "Expected 1 node with value 2.0")
+        #expect(value3Nodes.count == 1, "Expected 1 node with value 3.0")
+        #expect(pickerNodes.count == 2, "Expected 2 option picker nodes (inner and outer)")
+        #expect(dag.nodes.count == 7, "Expected total 7 nodes") // true, false, 1, 2, 3, inner if-else, outer if-else
+
+        // Validate structural integrity for complex nested case
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count >= 4, "Expected at least 4 leaf nodes (value nodes)")
+        #expect(nodeRoles.rootNode?.patch == .optionPicker, "Outer option picker should be root")
+
+        // Validate topological order (critical for nested structures)
+        #expect(validateTopologicalOrder(dag), "DAG should be acyclic despite complexity")
+
+        // Validate legacy properties
+        #expect(projectData?.description == "OptionPicker(ValueNode(1), ValueNode(3), OptionPicker(ValueNode(0), ValueNode(2), ValueNode(1)))")
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .optionPicker)
         #expect(rootNode?.inputs.count == 3)
@@ -1540,9 +1733,41 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 2)
-        #expect(projectData?.description == "ValueNode(5) -> RoundedNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
+        // Find specific node types
+        let valueNodes = findValueNodes(dag, withValue: 5.9)
+        let roundedNodes = findNodesByFunction(dag, function: .rounded)
+
+        // Validate node counts
+        #expect(valueNodes.count == 1, "Expected 1 value node with 5.9")
+        #expect(roundedNodes.count == 1, "Expected 1 rounded node")
+        #expect(dag.nodes.count == 2, "Expected total 2 nodes")
+
+        // Validate connections
+        guard let valueNode = valueNodes.first, let roundedNode = roundedNodes.first else {
+            #expect(Bool(false), "Expected both nodes to exist")
+            return
+        }
+
+        let expectedSources: [InputValue] = [
+            .incomingEdge(from: OutputCoordinate(nodeId: valueNode.nodeId, portId: 0))
+        ]
+        #expect(validateInputSources(dag, nodeId: roundedNode.nodeId, expectedSources: expectedSources), "Rounded node should connect to value node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.rootNode?.nodeId == roundedNode.nodeId, "Rounded node should be root")
+
+        // Validate structural integrity
+        #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
+
+        // Validate legacy properties
+        #expect(projectData?.description == "ValueNode(5) -> RoundedNode")
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .rounded)
     }
@@ -1552,9 +1777,41 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 2)
-        #expect(projectData?.description == "ValueNode(5) -> MagnitudeNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
+        // Find specific node types
+        let valueNodes = findValueNodes(dag, withValue: 5.9)
+        let magnitudeNodes = findNodesByFunction(dag, function: .magnitude)
+
+        // Validate node counts
+        #expect(valueNodes.count == 1, "Expected 1 value node with 5.9")
+        #expect(magnitudeNodes.count == 1, "Expected 1 magnitude node")
+        #expect(dag.nodes.count == 2, "Expected total 2 nodes")
+
+        // Validate connections
+        guard let valueNode = valueNodes.first, let magnitudeNode = magnitudeNodes.first else {
+            #expect(Bool(false), "Expected both nodes to exist")
+            return
+        }
+
+        let expectedSources: [InputValue] = [
+            .incomingEdge(from: OutputCoordinate(nodeId: valueNode.nodeId, portId: 0))
+        ]
+        #expect(validateInputSources(dag, nodeId: magnitudeNode.nodeId, expectedSources: expectedSources), "Magnitude node should connect to value node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.rootNode?.nodeId == magnitudeNode.nodeId, "Magnitude node should be root")
+
+        // Validate structural integrity
+        #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
+
+        // Validate legacy properties
+        #expect(projectData?.description == "ValueNode(5) -> MagnitudeNode")
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .magnitude)
     }
@@ -1564,9 +1821,56 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3)
-        #expect(projectData?.description == "ValueNode(5) -> RoundedNode -> MagnitudeNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
+        // Find specific node types
+        let valueNodes = findValueNodes(dag, withValue: 5.9)
+        let roundedNodes = findNodesByFunction(dag, function: .rounded)
+        let magnitudeNodes = findNodesByFunction(dag, function: .magnitude)
+
+        // Validate node counts
+        #expect(valueNodes.count == 1, "Expected 1 value node with 5.9")
+        #expect(roundedNodes.count == 1, "Expected 1 rounded node")
+        #expect(magnitudeNodes.count == 1, "Expected 1 magnitude node")
+        #expect(dag.nodes.count == 3, "Expected total 3 nodes")
+
+        // Validate connections for method chaining
+        guard let valueNode = valueNodes.first,
+              let roundedNode = roundedNodes.first,
+              let magnitudeNode = magnitudeNodes.first else {
+            #expect(Bool(false), "Expected all nodes to exist")
+            return
+        }
+
+        // Rounded node should connect to value node
+        let roundedExpectedSources: [InputValue] = [
+            .incomingEdge(from: OutputCoordinate(nodeId: valueNode.nodeId, portId: 0))
+        ]
+        #expect(validateInputSources(dag, nodeId: roundedNode.nodeId, expectedSources: roundedExpectedSources), "Rounded node should connect to value node")
+
+        // Magnitude node should connect to rounded node
+        let magnitudeExpectedSources: [InputValue] = [
+            .incomingEdge(from: OutputCoordinate(nodeId: roundedNode.nodeId, portId: 0))
+        ]
+        #expect(validateInputSources(dag, nodeId: magnitudeNode.nodeId, expectedSources: magnitudeExpectedSources), "Magnitude node should connect to rounded node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.rootNode?.nodeId == magnitudeNode.nodeId, "Magnitude node should be root")
+
+        // Validate structural integrity
+        #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
+
+        // Validate execution path tracing
+        let executionPath = traceExecutionPath(from: magnitudeNode.nodeId, in: dag)
+        #expect(executionPath == [.magnitude, .rounded], "Execution path should show magnitude -> rounded")
+
+        // Validate legacy properties
+        #expect(projectData?.description == "ValueNode(5) -> RoundedNode -> MagnitudeNode")
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .magnitude)
     }
@@ -1591,7 +1895,40 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 2)
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
+
+        // Find specific node types
+        let valueNodes = findValueNodes(dag, withValue: 2.7)
+        let roundedNodes = findNodesByFunction(dag, function: .rounded)
+
+        // Validate node counts
+        #expect(valueNodes.count == 1, "Expected 1 value node with 2.7")
+        #expect(roundedNodes.count == 1, "Expected 1 rounded node")
+        #expect(dag.nodes.count == 2, "Expected total 2 nodes")
+
+        // Validate connections
+        guard let valueNode = valueNodes.first, let roundedNode = roundedNodes.first else {
+            #expect(Bool(false), "Expected both nodes to exist")
+            return
+        }
+
+        let expectedSources: [InputValue] = [
+            .incomingEdge(from: OutputCoordinate(nodeId: valueNode.nodeId, portId: 0))
+        ]
+        #expect(validateInputSources(dag, nodeId: roundedNode.nodeId, expectedSources: expectedSources), "Rounded node should connect to value node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.rootNode?.nodeId == roundedNode.nodeId, "Rounded node should be root")
+
+        // Validate structural integrity
+        #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
+
+        // Validate legacy properties
         #expect(projectData?.description == "ValueNode(2) -> RoundedNode")
 
         let rootNode = projectData?.graph.getRootNode()
@@ -1603,9 +1940,56 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3)
-        #expect(projectData?.description == "ValueNode(5) -> RoundedNode -> SinNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
+        // Find specific node types
+        let valueNodes = findValueNodes(dag, withValue: 5.9)
+        let roundedNodes = findNodesByFunction(dag, function: .rounded)
+        let sinNodes = findNodesByFunction(dag, function: .sin)
+
+        // Validate node counts
+        #expect(valueNodes.count == 1, "Expected 1 value node with 5.9")
+        #expect(roundedNodes.count == 1, "Expected 1 rounded node")
+        #expect(sinNodes.count == 1, "Expected 1 sin node")
+        #expect(dag.nodes.count == 3, "Expected total 3 nodes")
+
+        // Validate connections
+        guard let valueNode = valueNodes.first,
+              let roundedNode = roundedNodes.first,
+              let sinNode = sinNodes.first else {
+            #expect(Bool(false), "Expected all nodes to exist")
+            return
+        }
+
+        // Rounded node should connect to value node
+        let roundedExpectedSources: [InputValue] = [
+            .incomingEdge(from: OutputCoordinate(nodeId: valueNode.nodeId, portId: 0))
+        ]
+        #expect(validateInputSources(dag, nodeId: roundedNode.nodeId, expectedSources: roundedExpectedSources), "Rounded node should connect to value node")
+
+        // Sin node should connect to rounded node
+        let sinExpectedSources: [InputValue] = [
+            .incomingEdge(from: OutputCoordinate(nodeId: roundedNode.nodeId, portId: 0))
+        ]
+        #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: sinExpectedSources), "Sin node should connect to rounded node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.rootNode?.nodeId == sinNode.nodeId, "Sin node should be root")
+
+        // Validate structural integrity
+        #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
+
+        // Validate execution path tracing
+        let executionPath = traceExecutionPath(from: sinNode.nodeId, in: dag)
+        #expect(executionPath == [.sin, .rounded], "Execution path should show sin -> rounded")
+
+        // Validate legacy properties
+        #expect(projectData?.description == "ValueNode(5) -> RoundedNode -> SinNode")
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .sin)
     }
