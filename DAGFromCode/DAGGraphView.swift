@@ -328,6 +328,12 @@ struct NodeView: View {
                         .font(.title)
                         .foregroundColor(.secondary)
                 }
+
+                // Show first 5 characters of UUID for debugging
+                Text(String(node.nodeId.uuidString.prefix(5)))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .opacity(0.7)
             }
             .padding()
         }
