@@ -400,7 +400,7 @@ struct EdgesView: View {
                         dag: dag,
                         fromOutputCoordinate: from,
                         toNodeId: fromNodeId,
-                        toInputIndex: inputIndex,
+                        toInputPortId: input.id.portId,
                         levels: levels,
                         nodeWidth: nodeWidth,
                         nodeHeight: nodeHeight,
@@ -419,7 +419,7 @@ struct EdgePath: View {
     let dag: DAG
     let fromOutputCoordinate: OutputCoordinate
     let toNodeId: UUID
-    let toInputIndex: Int
+    let toInputPortId: Int
     let levels: [[UUID]]
     let nodeWidth: CGFloat
     let nodeHeight: CGFloat
@@ -444,7 +444,7 @@ struct EdgePath: View {
             // Input point (left side of destination node)
             let inputPoint = CGPoint(
                 x: toPosition.x - nodeWidth / 2,
-                y: toPosition.y + getInputOffset(toInputIndex)
+                y: toPosition.y + getInputOffset(toInputPortId)
             )
 
             path.move(to: outputPoint)
@@ -498,9 +498,13 @@ struct EdgePath: View {
         }
     }
 
-    private func getInputOffset(_ inputIndex: Int) -> CGFloat {
-        // For now, just center all inputs. Could be enhanced to show multiple input ports
-        return 0
+    private func getInputOffset(_ portId: Int) -> CGFloat {
+        // Offset inputs vertically to distinguish between different ports
+        let portSpacing: CGFloat = 25
+
+        // For 2 inputs (ports 0 and 1), center them around the node center
+        // Port 0 will be at -12.5, Port 1 will be at +12.5
+        return (CGFloat(portId) - 0.5) * portSpacing
     }
 }
 
