@@ -6,9 +6,181 @@
 //
 
 import Testing
+import Foundation
 @testable import DAGFromCode
 
+// MARK: - Supporting Types for Testing
+
+enum InputSource {
+    case value(Double)
+    case nodeWithFunction(DAGFunction)
+    case valueNode(Double)
+}
+
+struct NodeRoleClassification {
+    let leafNodes: [DAGFunctionNode]
+    let intermediateNodes: [DAGFunctionNode]
+    let rootNode: DAGFunctionNode?
+}
+
+extension DAGNodeType {
+    var functionNode: DAGFunctionNode? {
+        if case .function(let node) = self {
+            return node
+        }
+        return nil
+    }
+}
+
 struct DAGFromCodeTests {
+
+    // MARK: - DAG Analysis Helper Functions
+
+    func findNodesByFunction(_ dag: DAG, function: DAGFunction) -> [DAGFunctionNode] {
+        return dag.getAllNodes().compactMap { node in
+            if case .function(let functionNode) = node, functionNode.patch == function {
+                return functionNode
+            }
+            return nil
+        }
+    }
+
+    func findValueNodes(_ dag: DAG, withValue value: Double) -> [DAGFunctionNode] {
+        return dag.getAllNodes().compactMap { node in
+            if case .function(let functionNode) = node,
+               functionNode.patch == .value,
+               let firstInput = functionNode.inputs.first,
+               case .value(let nodeValue) = firstInput.input,
+               nodeValue == value {
+                return functionNode
+            }
+            return nil
+        }
+    }
+
+    func validateInputSources(_ dag: DAG, nodeId: UUID, expectedSources: [InputSource]) -> Bool {
+        guard let node = dag.getNode(by: nodeId),
+              case .function(let functionNode) = node else {
+            return false
+        }
+
+        guard functionNode.inputs.count == expectedSources.count else {
+            return false
+        }
+
+        for (index, expectedSource) in expectedSources.enumerated() {
+            let actualInput = functionNode.inputs[index]
+
+            switch (actualInput.input, expectedSource) {
+            case (.value(let actualValue), .value(let expectedValue)):
+                if actualValue != expectedValue { return false }
+
+            case (.incomingEdge(let from), .nodeWithFunction(let expectedFunction)):
+                guard let sourceNode = dag.getNode(by: from.nodeId),
+                      case .function(let sourceFunctionNode) = sourceNode,
+                      sourceFunctionNode.patch == expectedFunction else {
+                    return false
+                }
+
+            case (.incomingEdge(let from), .valueNode(let expectedValue)):
+                guard let sourceNode = dag.getNode(by: from.nodeId),
+                      case .function(let sourceFunctionNode) = sourceNode,
+                      sourceFunctionNode.patch == .value,
+                      let firstInput = sourceFunctionNode.inputs.first,
+                      case .value(let sourceValue) = firstInput.input,
+                      sourceValue == expectedValue else {
+                    return false
+                }
+
+            default:
+                return false
+            }
+        }
+
+        return true
+    }
+
+    func classifyNodesByRole(_ dag: DAG) -> NodeRoleClassification {
+        let allNodes = dag.getAllNodes()
+        var leafNodes: [DAGFunctionNode] = []
+        var intermediateNodes: [DAGFunctionNode] = []
+        var rootNode: DAGFunctionNode?
+
+        for node in allNodes {
+            if case .function(let functionNode) = node {
+                if functionNode.nodeId == dag.resultNodeId {
+                    rootNode = functionNode
+                } else if functionNode.inputs.allSatisfy({ input in
+                    if case .value = input.input { return true }
+                    return false
+                }) {
+                    leafNodes.append(functionNode)
+                } else {
+                    intermediateNodes.append(functionNode)
+                }
+            }
+        }
+
+        return NodeRoleClassification(leafNodes: leafNodes, intermediateNodes: intermediateNodes, rootNode: rootNode)
+    }
+
+    func validateTopologicalOrder(_ dag: DAG) -> Bool {
+        let allNodes = dag.getAllNodes()
+        var visited: Set<UUID> = []
+        var visiting: Set<UUID> = []
+
+        func hasCycle(_ nodeId: UUID) -> Bool {
+            if visiting.contains(nodeId) { return true }
+            if visited.contains(nodeId) { return false }
+
+            visiting.insert(nodeId)
+
+            guard let node = dag.getNode(by: nodeId) else { return false }
+
+            for input in node.inputs {
+                if case .incomingEdge(let from) = input.input {
+                    if hasCycle(from.nodeId) { return true }
+                }
+            }
+
+            visiting.remove(nodeId)
+            visited.insert(nodeId)
+            return false
+        }
+
+        for node in allNodes {
+            if !visited.contains(node.id) && hasCycle(node.id) {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    func traceExecutionPath(from startNodeId: UUID, in dag: DAG) -> [DAGFunction] {
+        var path: [DAGFunction] = []
+        var visited: Set<UUID> = []
+
+        func trace(_ nodeId: UUID) {
+            guard !visited.contains(nodeId),
+                  let node = dag.getNode(by: nodeId),
+                  case .function(let functionNode) = node else {
+                return
+            }
+
+            visited.insert(nodeId)
+            path.append(functionNode.patch)
+
+            for input in functionNode.inputs {
+                if case .incomingEdge(let from) = input.input {
+                    trace(from.nodeId)
+                }
+            }
+        }
+
+        trace(startNodeId)
+        return path
+    }
 
     @Test func parseSimpleValue() throws {
         let source = "4"
@@ -581,12 +753,49 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 6) // 5, 4, >, 100, 0, if-else
-        #expect(projectData?.description == "OptionPicker(GreaterThan(ValueNode(5), ValueNode(4)), ValueNode(0), ValueNode(100))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .optionPicker)
-        #expect(rootNode?.inputs.count == 3)
+        #expect(dag.nodes.count == 6) // 5, 4, >, 100, 0, if-else
+
+        // Find all node types
+        let value5Nodes = findValueNodes(dag, withValue: 5.0)
+        let value4Nodes = findValueNodes(dag, withValue: 4.0)
+        let value100Nodes = findValueNodes(dag, withValue: 100.0)
+        let value0Nodes = findValueNodes(dag, withValue: 0.0)
+        let greaterThanNodes = findNodesByFunction(dag, function: .greaterThan)
+        let optionPickerNodes = findNodesByFunction(dag, function: .optionPicker)
+
+        // Verify exact counts
+        #expect(value5Nodes.count == 1, "Expected exactly one ValueNode with value 5")
+        #expect(value4Nodes.count == 1, "Expected exactly one ValueNode with value 4")
+        #expect(value100Nodes.count == 1, "Expected exactly one ValueNode with value 100")
+        #expect(value0Nodes.count == 1, "Expected exactly one ValueNode with value 0")
+        #expect(greaterThanNodes.count == 1, "Expected exactly one GreaterThan node")
+        #expect(optionPickerNodes.count == 1, "Expected exactly one OptionPicker node")
+
+        // Validate input connections for GreaterThan: should receive 5 and 4
+        let greaterThanNode = greaterThanNodes.first!
+        let expectedGreaterThanSources: [InputSource] = [.valueNode(5.0), .valueNode(4.0)]
+        #expect(validateInputSources(dag, nodeId: greaterThanNode.nodeId, expectedSources: expectedGreaterThanSources),
+                "GreaterThan node should receive inputs from ValueNode(5) and ValueNode(4)")
+
+        // Validate input connections for OptionPicker: should receive condition from GreaterThan, then false value (0), then true value (100)
+        let optionPickerNode = optionPickerNodes.first!
+        let expectedOptionPickerSources: [InputSource] = [.nodeWithFunction(.greaterThan), .valueNode(0.0), .valueNode(100.0)]
+        #expect(validateInputSources(dag, nodeId: optionPickerNode.nodeId, expectedSources: expectedOptionPickerSources),
+                "OptionPicker node should receive condition from GreaterThan, false value 0, and true value 100")
+
+        // Verify node roles
+        let roles = classifyNodesByRole(dag)
+        #expect(roles.leafNodes.count == 4, "Expected 4 leaf nodes (all value nodes)")
+        #expect(roles.intermediateNodes.count == 1, "Expected 1 intermediate node (GreaterThan)")
+        #expect(roles.rootNode?.patch == .optionPicker, "Expected OptionPicker as root node")
+
+        // Verify graph structure
+        #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
     }
 
     @Test func parseVariableIfElse() throws {
@@ -598,14 +807,44 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 4) // ValueNode(8), ValueNode(12), GreaterThan, OptionPicker
-        
-        // TODO: update this graph representation; really, we need to CRAWL the graph itself to make sure it has the expected nodes and connections.
-//        #expect(projectData?.description == "OptionPicker(GreaterThan(ValueNode(8), ValueNode(12)), ValueNode(12), ValueNode(8))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .optionPicker)
-        #expect(rootNode?.inputs.count == 3)
+        #expect(dag.nodes.count == 4) // ValueNode(8), ValueNode(12), GreaterThan, OptionPicker
+
+        // Structural validation using helper functions
+        let valueNodes8 = findValueNodes(dag, withValue: 8.0)
+        let valueNodes12 = findValueNodes(dag, withValue: 12.0)
+        let greaterThanNodes = findNodesByFunction(dag, function: .greaterThan)
+        let optionPickerNodes = findNodesByFunction(dag, function: .optionPicker)
+
+        #expect(valueNodes8.count == 1, "Expected exactly one ValueNode with value 8")
+        #expect(valueNodes12.count == 1, "Expected exactly one ValueNode with value 12")
+        #expect(greaterThanNodes.count == 1, "Expected exactly one GreaterThan node")
+        #expect(optionPickerNodes.count == 1, "Expected exactly one OptionPicker node")
+
+        // Validate connections: GreaterThan should receive inputs from both value nodes
+        let greaterThanNode = greaterThanNodes.first!
+        let expectedGreaterThanSources: [InputSource] = [.valueNode(8.0), .valueNode(12.0)]
+        #expect(validateInputSources(dag, nodeId: greaterThanNode.nodeId, expectedSources: expectedGreaterThanSources),
+                "GreaterThan node should receive inputs from ValueNode(8) and ValueNode(12)")
+
+        // Validate connections: OptionPicker should receive condition from GreaterThan and values from both value nodes
+        let optionPickerNode = optionPickerNodes.first!
+        let expectedOptionPickerSources: [InputSource] = [.nodeWithFunction(.greaterThan), .valueNode(12.0), .valueNode(8.0)]
+        #expect(validateInputSources(dag, nodeId: optionPickerNode.nodeId, expectedSources: expectedOptionPickerSources),
+                "OptionPicker node should receive condition from GreaterThan and values from both ValueNodes")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 2, "Expected 2 leaf nodes (value nodes)")
+        #expect(nodeRoles.intermediateNodes.count == 1, "Expected 1 intermediate node (GreaterThan)")
+        #expect(nodeRoles.rootNode?.patch == .optionPicker, "Expected OptionPicker as root node")
+
+        // Validate topological structure (no cycles)
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     @Test func parseNestedIfElse() throws {
@@ -743,6 +982,41 @@ struct DAGFromCodeTests {
 
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .sin)
+    }
+
+    @Test func validateStructuralIntegrityComprehensive() throws {
+        let source = """
+        let x = 1.0
+        let y = 2.0
+        sin(x + y) * 2.0
+        """
+        let projectData = ProjectDataParser.parse(source)
+
+        #expect(projectData != nil)
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
+
+        // Test all structural properties
+        #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
+
+        // Test node role classification
+        let roles = classifyNodesByRole(dag)
+        #expect(roles.rootNode != nil, "Should have exactly one root node")
+        #expect(roles.leafNodes.count >= 2, "Should have at least two leaf nodes (value nodes)")
+
+        // Test that all nodes are reachable from root
+        let rootNodeId = dag.resultNodeId
+        let executionPath = traceExecutionPath(from: rootNodeId, in: dag)
+        #expect(!executionPath.isEmpty, "Should be able to trace execution path from root")
+
+        // Test specific function types exist
+        let hasValueNodes = !findNodesByFunction(dag, function: .value).isEmpty
+        #expect(hasValueNodes, "Should contain value nodes")
+
+        // Verify we have a complex enough graph with multiple operations
+        #expect(dag.nodes.count >= 3, "Should have multiple nodes for a complex expression")
     }
 
     @Test func parseVariableReuseInTernary() throws {

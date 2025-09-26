@@ -14,9 +14,9 @@
             filePath = "DAGFromCodeTests/DAGFromCodeTests.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "482"
-            endingLineNumber = "482"
-            landmarkName = "parseComparisonTernary()"
+            startingLineNumber = "483"
+            endingLineNumber = "483"
+            landmarkName = "parseMultipleVariableDeclarations()"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
