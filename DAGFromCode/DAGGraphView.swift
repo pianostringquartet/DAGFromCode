@@ -15,49 +15,35 @@ struct DAGGraphView: View {
     private let nodeSpacing: CGFloat = 50
     private let scrollPadding: CGFloat = 100
 
+    @State private var nodePositions: [UUID: CGPoint] = [:]
+
     var body: some View {
         GeometryReader { geometry in
             let levels = buildDAGLevels(dag)
-            let totalWidth = CGFloat(max(1, levels.count - 1)) * levelSpacing + nodeWidth + (2 * scrollPadding)
-            let maxNodesInLevel = levels.map(\.count).max() ?? 1
-            let totalHeight = CGFloat(max(1, maxNodesInLevel - 1)) * (nodeHeight + nodeSpacing) + nodeHeight + (2 * scrollPadding)
-
+            let dimensions = calculateCanvasDimensions(levels: levels)
+            
             ScrollView([.horizontal, .vertical]) {
-                ZStack {
-                    // Draw edges first (behind nodes)
-                    ForEach(Array(levels.enumerated()), id: \.offset) { levelIndex, nodeIds in
-                        ForEach(Array(nodeIds.enumerated()), id: \.offset) { nodeIndex, nodeId in
-                            EdgesView(
-                                dag: dag,
-                                fromNodeId: nodeId,
-                                levels: levels,
-                                nodeWidth: nodeWidth,
-                                nodeHeight: nodeHeight,
-                                levelSpacing: levelSpacing,
-                                nodeSpacing: nodeSpacing,
-                                scrollPadding: scrollPadding
-                            )
-                        }
-                    }
-
-                    // Draw nodes
-                    ForEach(Array(levels.enumerated()), id: \.offset) { levelIndex, nodeIds in
-                        ForEach(Array(nodeIds.enumerated()), id: \.offset) { nodeIndex, nodeId in
-                            if let node = dag.getNode(by: nodeId) {
-                                NodeView(node: node)
-                                    .frame(width: nodeWidth, height: nodeHeight)
-                                    .position(
-                                        x: CGFloat(levelIndex) * levelSpacing + nodeWidth / 2 + scrollPadding,
-                                        y: calculateNodeY(nodeIndex: nodeIndex, totalNodesInLevel: nodeIds.count) + scrollPadding
-                                    )
-                            }
-                        }
-                    }
-                }
-                .frame(width: totalWidth, height: totalHeight)
+                DAGCanvasView(
+                    dag: dag,
+                    levels: levels,
+                    dimensions: dimensions,
+                    nodeWidth: nodeWidth,
+                    nodeHeight: nodeHeight,
+                    levelSpacing: levelSpacing,
+                    nodeSpacing: nodeSpacing,
+                    scrollPadding: scrollPadding,
+                    nodePositions: $nodePositions
+                )
             }
         }
         .background(Color(NSColor.controlBackgroundColor))
+    }
+    
+    private func calculateCanvasDimensions(levels: [[UUID]]) -> CGSize {
+        let totalWidth = CGFloat(max(1, levels.count - 1)) * levelSpacing + nodeWidth + (2 * scrollPadding)
+        let maxNodesInLevel = levels.map(\.count).max() ?? 1
+        let totalHeight = CGFloat(max(1, maxNodesInLevel - 1)) * (nodeHeight + nodeSpacing) + nodeHeight + (2 * scrollPadding)
+        return CGSize(width: totalWidth, height: totalHeight)
     }
 
     private func calculateNodeY(nodeIndex: Int, totalNodesInLevel: Int) -> CGFloat {
@@ -158,6 +144,165 @@ struct DAGGraphView: View {
     }
 }
 
+struct DAGCanvasView: View {
+    let dag: DAG
+    let levels: [[UUID]]
+    let dimensions: CGSize
+    let nodeWidth: CGFloat
+    let nodeHeight: CGFloat
+    let levelSpacing: CGFloat
+    let nodeSpacing: CGFloat
+    let scrollPadding: CGFloat
+    @Binding var nodePositions: [UUID: CGPoint]
+    
+    var body: some View {
+        ZStack {
+            // Draw edges first (behind nodes)
+            DAGEdgesLayer(
+                dag: dag,
+                levels: levels,
+                nodeWidth: nodeWidth,
+                nodeHeight: nodeHeight,
+                levelSpacing: levelSpacing,
+                nodeSpacing: nodeSpacing,
+                scrollPadding: scrollPadding,
+                nodePositions: nodePositions
+            )
+            
+            // Draw nodes
+            DAGNodesLayer(
+                dag: dag,
+                levels: levels,
+                nodeWidth: nodeWidth,
+                nodeHeight: nodeHeight,
+                levelSpacing: levelSpacing,
+                nodeSpacing: nodeSpacing,
+                scrollPadding: scrollPadding,
+                nodePositions: $nodePositions
+            )
+        }
+        .frame(width: dimensions.width, height: dimensions.height)
+    }
+}
+
+struct DAGEdgesLayer: View {
+    let dag: DAG
+    let levels: [[UUID]]
+    let nodeWidth: CGFloat
+    let nodeHeight: CGFloat
+    let levelSpacing: CGFloat
+    let nodeSpacing: CGFloat
+    let scrollPadding: CGFloat
+    let nodePositions: [UUID: CGPoint]
+    
+    var body: some View {
+        ForEach(Array(levels.enumerated()), id: \.offset) { levelIndex, nodeIds in
+            ForEach(Array(nodeIds.enumerated()), id: \.offset) { nodeIndex, nodeId in
+                EdgesView(
+                    dag: dag,
+                    fromNodeId: nodeId,
+                    levels: levels,
+                    nodeWidth: nodeWidth,
+                    nodeHeight: nodeHeight,
+                    levelSpacing: levelSpacing,
+                    nodeSpacing: nodeSpacing,
+                    scrollPadding: scrollPadding,
+                    nodePositions: nodePositions
+                )
+            }
+        }
+    }
+}
+
+struct DAGNodesLayer: View {
+    let dag: DAG
+    let levels: [[UUID]]
+    let nodeWidth: CGFloat
+    let nodeHeight: CGFloat
+    let levelSpacing: CGFloat
+    let nodeSpacing: CGFloat
+    let scrollPadding: CGFloat
+    @Binding var nodePositions: [UUID: CGPoint]
+    
+    var body: some View {
+        ForEach(Array(levels.enumerated()), id: \.offset) { levelIndex, nodeIds in
+            ForEach(Array(nodeIds.enumerated()), id: \.offset) { nodeIndex, nodeId in
+                DAGNodeWrapper(
+                    dag: dag,
+                    nodeId: nodeId,
+                    levelIndex: levelIndex,
+                    nodeIndex: nodeIndex,
+                    totalNodesInLevel: nodeIds.count,
+                    nodeWidth: nodeWidth,
+                    nodeHeight: nodeHeight,
+                    levelSpacing: levelSpacing,
+                    nodeSpacing: nodeSpacing,
+                    scrollPadding: scrollPadding,
+                    nodePositions: $nodePositions
+                )
+            }
+        }
+    }
+}
+
+struct DAGNodeWrapper: View {
+    let dag: DAG
+    let nodeId: UUID
+    let levelIndex: Int
+    let nodeIndex: Int
+    let totalNodesInLevel: Int
+    let nodeWidth: CGFloat
+    let nodeHeight: CGFloat
+    let levelSpacing: CGFloat
+    let nodeSpacing: CGFloat
+    let scrollPadding: CGFloat
+    @Binding var nodePositions: [UUID: CGPoint]
+    @State private var dragStartPosition: CGPoint = .zero
+    
+    var body: some View {
+        if let node = dag.getNode(by: nodeId) {
+            let defaultPosition = CGPoint(
+                x: CGFloat(levelIndex) * levelSpacing + nodeWidth / 2 + scrollPadding,
+                y: calculateNodeY(nodeIndex: nodeIndex, totalNodesInLevel: totalNodesInLevel) + scrollPadding
+            )
+            let currentPosition = nodePositions[nodeId] ?? defaultPosition
+            
+            NodeView(node: node)
+                .frame(width: nodeWidth, height: nodeHeight)
+                .position(currentPosition)
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            nodePositions[nodeId] = CGPoint(
+                                x: dragStartPosition.x + value.translation.width,
+                                y: dragStartPosition.y + value.translation.height
+                            )
+                        }
+                        .onEnded { _ in
+                            // Update the drag start position for next drag
+                            dragStartPosition = nodePositions[nodeId] ?? defaultPosition
+                        }
+                )
+                .onAppear {
+                    if nodePositions[nodeId] == nil {
+                        nodePositions[nodeId] = defaultPosition
+                    }
+                    dragStartPosition = nodePositions[nodeId] ?? defaultPosition
+                }
+        }
+    }
+    
+    private func calculateNodeY(nodeIndex: Int, totalNodesInLevel: Int) -> CGFloat {
+        if totalNodesInLevel == 1 {
+            return nodeHeight / 2
+        }
+
+        let totalSpacing = CGFloat(totalNodesInLevel - 1) * (nodeHeight + nodeSpacing)
+        let startY = nodeHeight / 2
+        return startY + CGFloat(nodeIndex) * (nodeHeight + nodeSpacing)
+    }
+}
+
 struct NodeView: View {
     let node: DAGNodeType
 
@@ -245,12 +390,14 @@ struct EdgesView: View {
     let levelSpacing: CGFloat
     let nodeSpacing: CGFloat
     let scrollPadding: CGFloat
+    let nodePositions: [UUID: CGPoint]
 
     var body: some View {
         if let fromNode = dag.getNode(by: fromNodeId) {
             ForEach(Array(fromNode.inputs.enumerated()), id: \.offset) { inputIndex, input in
                 if case .incomingEdge(let from) = input.input {
                     EdgePath(
+                        dag: dag,
                         fromOutputCoordinate: from,
                         toNodeId: fromNodeId,
                         toInputIndex: inputIndex,
@@ -259,7 +406,8 @@ struct EdgesView: View {
                         nodeHeight: nodeHeight,
                         levelSpacing: levelSpacing,
                         nodeSpacing: nodeSpacing,
-                        scrollPadding: scrollPadding
+                        scrollPadding: scrollPadding,
+                        nodePositions: nodePositions
                     )
                 }
             }
@@ -268,6 +416,7 @@ struct EdgesView: View {
 }
 
 struct EdgePath: View {
+    let dag: DAG
     let fromOutputCoordinate: OutputCoordinate
     let toNodeId: UUID
     let toInputIndex: Int
@@ -277,30 +426,31 @@ struct EdgePath: View {
     let levelSpacing: CGFloat
     let nodeSpacing: CGFloat
     let scrollPadding: CGFloat
+    let nodePositions: [UUID: CGPoint]
 
     var body: some View {
         Path { path in
-            guard let fromPosition = getNodePosition(fromOutputCoordinate.nodeId),
-                  let toPosition = getNodePosition(toNodeId) else {
+            guard let fromPosition = getActualNodePosition(fromOutputCoordinate.nodeId),
+                  let toPosition = getActualNodePosition(toNodeId) else {
                 return
             }
 
             // Output point (right side of source node)
             let outputPoint = CGPoint(
-                x: fromPosition.x + nodeWidth / 2 + scrollPadding,
-                y: fromPosition.y + scrollPadding
+                x: fromPosition.x + nodeWidth / 2,
+                y: fromPosition.y
             )
 
             // Input point (left side of destination node)
             let inputPoint = CGPoint(
-                x: toPosition.x - nodeWidth / 2 + scrollPadding,
-                y: toPosition.y + getInputOffset(toInputIndex) + scrollPadding
+                x: toPosition.x - nodeWidth / 2,
+                y: toPosition.y + getInputOffset(toInputIndex)
             )
 
             path.move(to: outputPoint)
             path.addLine(to: inputPoint)
         }
-        .stroke(Color.primary.opacity(0.6), lineWidth: 4)
+        .stroke(getOutputNodeColor(), lineWidth: 4)
     }
 
     private func getNodePosition(_ nodeId: UUID) -> CGPoint? {
@@ -321,6 +471,31 @@ struct EdgePath: View {
 
         let startY = nodeHeight / 2
         return startY + CGFloat(nodeIndex) * (nodeHeight + nodeSpacing)
+    }
+
+    private func getActualNodePosition(_ nodeId: UUID) -> CGPoint? {
+        // Use the current dragged position if available, otherwise fall back to calculated position
+        if let draggedPosition = nodePositions[nodeId] {
+            return draggedPosition
+        }
+        return getNodePosition(nodeId)
+    }
+
+    private func getOutputNodeColor() -> Color {
+        guard let outputNode = dag.getNode(by: fromOutputCoordinate.nodeId) else {
+            return Color.primary.opacity(0.6)
+        }
+
+        switch outputNode {
+        case .function(let functionNode):
+            switch functionNode.patch {
+            case .value: return .blue
+            case .sin, .cos, .sqrt, .rounded, .magnitude: return .green
+            case .add, .subtract, .greaterThan, .lessThan, .equal: return .purple
+            case .optionPicker: return .orange
+            }
+        case .layerInput: return .gray
+        }
     }
 
     private func getInputOffset(_ inputIndex: Int) -> CGFloat {
