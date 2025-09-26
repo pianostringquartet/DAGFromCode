@@ -9,17 +9,18 @@ import SwiftUI
 
 struct DAGGraphView: View {
     let dag: DAG
-    private let nodeWidth: CGFloat = 600
-    private let nodeHeight: CGFloat = 400
-    private let levelSpacing: CGFloat = 700
-    private let nodeSpacing: CGFloat = 100
+    private let nodeWidth: CGFloat = 200
+    private let nodeHeight: CGFloat = 100
+    private let levelSpacing: CGFloat = 300
+    private let nodeSpacing: CGFloat = 50
+    private let scrollPadding: CGFloat = 100
 
     var body: some View {
         GeometryReader { geometry in
             let levels = buildDAGLevels(dag)
-            let totalWidth = CGFloat(max(1, levels.count - 1)) * levelSpacing + nodeWidth
+            let totalWidth = CGFloat(max(1, levels.count - 1)) * levelSpacing + nodeWidth + (2 * scrollPadding)
             let maxNodesInLevel = levels.map(\.count).max() ?? 1
-            let totalHeight = CGFloat(max(1, maxNodesInLevel - 1)) * (nodeHeight + nodeSpacing) + nodeHeight
+            let totalHeight = CGFloat(max(1, maxNodesInLevel - 1)) * (nodeHeight + nodeSpacing) + nodeHeight + (2 * scrollPadding)
 
             ScrollView([.horizontal, .vertical]) {
                 ZStack {
@@ -33,7 +34,8 @@ struct DAGGraphView: View {
                                 nodeWidth: nodeWidth,
                                 nodeHeight: nodeHeight,
                                 levelSpacing: levelSpacing,
-                                nodeSpacing: nodeSpacing
+                                nodeSpacing: nodeSpacing,
+                                scrollPadding: scrollPadding
                             )
                         }
                     }
@@ -45,8 +47,8 @@ struct DAGGraphView: View {
                                 NodeView(node: node)
                                     .frame(width: nodeWidth, height: nodeHeight)
                                     .position(
-                                        x: CGFloat(levelIndex) * levelSpacing + nodeWidth / 2,
-                                        y: calculateNodeY(nodeIndex: nodeIndex, totalNodesInLevel: nodeIds.count)
+                                        x: CGFloat(levelIndex) * levelSpacing + nodeWidth / 2 + scrollPadding,
+                                        y: calculateNodeY(nodeIndex: nodeIndex, totalNodesInLevel: nodeIds.count) + scrollPadding
                                     )
                             }
                         }
@@ -242,6 +244,7 @@ struct EdgesView: View {
     let nodeHeight: CGFloat
     let levelSpacing: CGFloat
     let nodeSpacing: CGFloat
+    let scrollPadding: CGFloat
 
     var body: some View {
         if let fromNode = dag.getNode(by: fromNodeId) {
@@ -255,7 +258,8 @@ struct EdgesView: View {
                         nodeWidth: nodeWidth,
                         nodeHeight: nodeHeight,
                         levelSpacing: levelSpacing,
-                        nodeSpacing: nodeSpacing
+                        nodeSpacing: nodeSpacing,
+                        scrollPadding: scrollPadding
                     )
                 }
             }
@@ -272,6 +276,7 @@ struct EdgePath: View {
     let nodeHeight: CGFloat
     let levelSpacing: CGFloat
     let nodeSpacing: CGFloat
+    let scrollPadding: CGFloat
 
     var body: some View {
         Path { path in
@@ -282,20 +287,20 @@ struct EdgePath: View {
 
             // Output point (right side of source node)
             let outputPoint = CGPoint(
-                x: fromPosition.x + nodeWidth / 2,
-                y: fromPosition.y
+                x: fromPosition.x + nodeWidth / 2 + scrollPadding,
+                y: fromPosition.y + scrollPadding
             )
 
             // Input point (left side of destination node)
             let inputPoint = CGPoint(
-                x: toPosition.x - nodeWidth / 2,
-                y: toPosition.y + getInputOffset(toInputIndex)
+                x: toPosition.x - nodeWidth / 2 + scrollPadding,
+                y: toPosition.y + getInputOffset(toInputIndex) + scrollPadding
             )
 
             path.move(to: outputPoint)
             path.addLine(to: inputPoint)
         }
-        .stroke(Color.primary.opacity(0.6), lineWidth: 2)
+        .stroke(Color.primary.opacity(0.6), lineWidth: 4)
     }
 
     private func getNodePosition(_ nodeId: UUID) -> CGPoint? {
