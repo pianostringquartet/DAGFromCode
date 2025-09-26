@@ -108,14 +108,21 @@ struct DAGFromCodeTests {
 
         for node in allNodes {
             if case .function(let functionNode) = node {
+                // Check if this is the root node
                 if functionNode.nodeId == dag.resultNodeId {
                     rootNode = functionNode
-                } else if functionNode.inputs.allSatisfy({ input in
+                }
+
+                // Check if this is a leaf node (has only .value inputs)
+                let isLeaf = functionNode.inputs.allSatisfy({ input in
                     if case .value = input.input { return true }
                     return false
-                }) {
+                })
+
+                if isLeaf {
                     leafNodes.append(functionNode)
-                } else {
+                } else if functionNode.nodeId != dag.resultNodeId {
+                    // Only add to intermediate if it's not the root node
                     intermediateNodes.append(functionNode)
                 }
             }
@@ -187,9 +194,31 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 1)
-        #expect(projectData?.description == "ValueNode(4)")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
+        #expect(dag.nodes.count == 1)
+
+        // Enhanced structural validation
+        let value4Nodes = findValueNodes(dag, withValue: 4.0)
+        let allValueNodes = findNodesByFunction(dag, function: .value)
+
+        // Verify exact counts using helper functions
+        #expect(value4Nodes.count == 1, "Expected exactly one ValueNode with value 4")
+        #expect(allValueNodes.count == 1, "Expected exactly one Value node total")
+
+        // Validate node roles for single value
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (the value node)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .value, "Expected Value node as root")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order")
+
+        // Original detailed validation (preserved)
         let rootNode = projectData?.graph.getRootNode()
         switch rootNode {
         case .function(let functionNode):
@@ -212,11 +241,40 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 2)
-        #expect(projectData?.description == "ValueNode(1) -> SinNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .sin)
+        #expect(dag.nodes.count == 2) // ValueNode(1), Sin
+
+        // Find all node types
+        let value1Nodes = findValueNodes(dag, withValue: 1.0)
+        let sinNodes = findNodesByFunction(dag, function: .sin)
+
+        // Verify exact counts
+        #expect(value1Nodes.count == 1, "Expected exactly one ValueNode with value 1")
+        #expect(sinNodes.count == 1, "Expected exactly one Sin node")
+
+        // Validate connections: Sin should receive input from ValueNode(1)
+        let sinNode = sinNodes.first!
+        let expectedSinSources: [InputSource] = [.valueNode(1.0)]
+        #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: expectedSinSources),
+                "Sin node should receive input from ValueNode(1)")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .sin, "Expected Sin as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
+
+        // Validate execution path
+        let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
+        #expect(executionPath.contains(.sin), "Execution path should include sin")
+        #expect(executionPath.contains(.value), "Execution path should include value node")
     }
 
     @Test func parseNestedFunctions() throws {
@@ -224,11 +282,50 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3)
-        #expect(projectData?.description == "ValueNode(4) -> SquareRootNode -> SinNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .sin)
+        #expect(dag.nodes.count == 3) // ValueNode(4), Sqrt, Sin
+
+        // Find all node types
+        let value4Nodes = findValueNodes(dag, withValue: 4.0)
+        let sqrtNodes = findNodesByFunction(dag, function: .sqrt)
+        let sinNodes = findNodesByFunction(dag, function: .sin)
+
+        // Verify exact counts
+        #expect(value4Nodes.count == 1, "Expected exactly one ValueNode with value 4")
+        #expect(sqrtNodes.count == 1, "Expected exactly one Sqrt node")
+        #expect(sinNodes.count == 1, "Expected exactly one Sin node")
+
+        // Validate connections: Sqrt should receive input from ValueNode(4)
+        let sqrtNode = sqrtNodes.first!
+        let expectedSqrtSources: [InputSource] = [.valueNode(4.0)]
+        #expect(validateInputSources(dag, nodeId: sqrtNode.nodeId, expectedSources: expectedSqrtSources),
+                "Sqrt node should receive input from ValueNode(4)")
+
+        // Validate connections: Sin should receive input from Sqrt node
+        let sinNode = sinNodes.first!
+        let expectedSinSources: [InputSource] = [.nodeWithFunction(.sqrt)]
+        #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: expectedSinSources),
+                "Sin node should receive input from Sqrt node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.intermediateNodes.count == 1, "Expected 1 intermediate node (Sqrt)")
+        #expect(nodeRoles.rootNode?.patch == .sin, "Expected Sin as root node")
+
+        // Validate topological structure and execution path
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
+        let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
+        #expect(executionPath.contains(.sin), "Execution path should include sin")
+        #expect(executionPath.contains(.sqrt), "Execution path should include sqrt")
+        #expect(executionPath.contains(.value), "Execution path should include value node")
+
+        // Validate execution order in path (should process value→sqrt→sin)
+        #expect(executionPath.count >= 3, "Execution path should include all 3 operations")
     }
 
     @Test func parseTripleNested() throws {
@@ -236,11 +333,59 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 4)
-        #expect(projectData?.description == "ValueNode(4) -> SquareRootNode -> SinNode -> CosNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .cos)
+        #expect(dag.nodes.count == 4) // ValueNode(4), Sqrt, Sin, Cos
+
+        // Find all node types
+        let value4Nodes = findValueNodes(dag, withValue: 4.0)
+        let sqrtNodes = findNodesByFunction(dag, function: .sqrt)
+        let sinNodes = findNodesByFunction(dag, function: .sin)
+        let cosNodes = findNodesByFunction(dag, function: .cos)
+
+        // Verify exact counts
+        #expect(value4Nodes.count == 1, "Expected exactly one ValueNode with value 4")
+        #expect(sqrtNodes.count == 1, "Expected exactly one Sqrt node")
+        #expect(sinNodes.count == 1, "Expected exactly one Sin node")
+        #expect(cosNodes.count == 1, "Expected exactly one Cos node")
+
+        // Validate connections: Sqrt ← ValueNode(4)
+        let sqrtNode = sqrtNodes.first!
+        let expectedSqrtSources: [InputSource] = [.valueNode(4.0)]
+        #expect(validateInputSources(dag, nodeId: sqrtNode.nodeId, expectedSources: expectedSqrtSources),
+                "Sqrt node should receive input from ValueNode(4)")
+
+        // Validate connections: Sin ← Sqrt
+        let sinNode = sinNodes.first!
+        let expectedSinSources: [InputSource] = [.nodeWithFunction(.sqrt)]
+        #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: expectedSinSources),
+                "Sin node should receive input from Sqrt node")
+
+        // Validate connections: Cos ← Sin
+        let cosNode = cosNodes.first!
+        let expectedCosSources: [InputSource] = [.nodeWithFunction(.sin)]
+        #expect(validateInputSources(dag, nodeId: cosNode.nodeId, expectedSources: expectedCosSources),
+                "Cos node should receive input from Sin node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.intermediateNodes.count == 2, "Expected 2 intermediate nodes (Sqrt, Sin)")
+        #expect(nodeRoles.rootNode?.patch == .cos, "Expected Cos as root node")
+
+        // Validate topological structure and execution path
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
+        let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
+        #expect(executionPath.contains(.cos), "Execution path should include cos")
+        #expect(executionPath.contains(.sin), "Execution path should include sin")
+        #expect(executionPath.contains(.sqrt), "Execution path should include sqrt")
+        #expect(executionPath.contains(.value), "Execution path should include value node")
+
+        // Validate complete chain: value→sqrt→sin→cos
+        #expect(executionPath.count >= 4, "Execution path should include all 4 operations")
     }
 
     @Test func parseCosSin() throws {
@@ -248,11 +393,47 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3)
-        #expect(projectData?.description == "ValueNode(1) -> SinNode -> CosNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .cos)
+        #expect(dag.nodes.count == 3) // ValueNode(1), Sin, Cos
+
+        // Find all node types
+        let value1Nodes = findValueNodes(dag, withValue: 1.0)
+        let sinNodes = findNodesByFunction(dag, function: .sin)
+        let cosNodes = findNodesByFunction(dag, function: .cos)
+
+        // Verify exact counts
+        #expect(value1Nodes.count == 1, "Expected exactly one ValueNode with value 1")
+        #expect(sinNodes.count == 1, "Expected exactly one Sin node")
+        #expect(cosNodes.count == 1, "Expected exactly one Cos node")
+
+        // Validate connections: Sin ← ValueNode(1)
+        let sinNode = sinNodes.first!
+        let expectedSinSources: [InputSource] = [.valueNode(1.0)]
+        #expect(validateInputSources(dag, nodeId: sinNode.nodeId, expectedSources: expectedSinSources),
+                "Sin node should receive input from ValueNode(1)")
+
+        // Validate connections: Cos ← Sin
+        let cosNode = cosNodes.first!
+        let expectedCosSources: [InputSource] = [.nodeWithFunction(.sin)]
+        #expect(validateInputSources(dag, nodeId: cosNode.nodeId, expectedSources: expectedCosSources),
+                "Cos node should receive input from Sin node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.intermediateNodes.count == 1, "Expected 1 intermediate node (Sin)")
+        #expect(nodeRoles.rootNode?.patch == .cos, "Expected Cos as root node")
+
+        // Validate topological structure and execution path
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
+        let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
+        #expect(executionPath.contains(.cos), "Execution path should include cos")
+        #expect(executionPath.contains(.sin), "Execution path should include sin")
+        #expect(executionPath.contains(.value), "Execution path should include value node")
     }
 
     @Test func parseFloatValue() throws {
@@ -260,9 +441,31 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 1)
-        #expect(projectData?.description == "ValueNode(2)")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
+        #expect(dag.nodes.count == 1)
+
+        // Enhanced structural validation for float value
+        let value25Nodes = findValueNodes(dag, withValue: 2.5)
+        let allValueNodes = findNodesByFunction(dag, function: .value)
+
+        // Verify exact counts using helper functions
+        #expect(value25Nodes.count == 1, "Expected exactly one ValueNode with value 2.5")
+        #expect(allValueNodes.count == 1, "Expected exactly one Value node total")
+
+        // Validate node roles for single float value
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (the float value node)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .value, "Expected Value node as root")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order")
+
+        // Original validation (preserved)
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .value)
         if let firstInput = rootNode?.inputs.first,
@@ -278,11 +481,35 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 2)
-        #expect(projectData?.description == "ValueNode(9) -> SquareRootNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .sqrt)
+        #expect(dag.nodes.count == 2) // ValueNode(9), Sqrt
+
+        // Find all node types
+        let value9Nodes = findValueNodes(dag, withValue: 9.0)
+        let sqrtNodes = findNodesByFunction(dag, function: .sqrt)
+
+        // Verify exact counts
+        #expect(value9Nodes.count == 1, "Expected exactly one ValueNode with value 9")
+        #expect(sqrtNodes.count == 1, "Expected exactly one Sqrt node")
+
+        // Validate connections: Sqrt ← ValueNode(9)
+        let sqrtNode = sqrtNodes.first!
+        let expectedSqrtSources: [InputSource] = [.valueNode(9.0)]
+        #expect(validateInputSources(dag, nodeId: sqrtNode.nodeId, expectedSources: expectedSqrtSources),
+                "Sqrt node should receive input from ValueNode(9)")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .sqrt, "Expected Sqrt as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     @Test func verifyNodeConnections() throws {
@@ -356,12 +583,41 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3) // 5, 3, -
-        #expect(projectData?.description == "Subtract(ValueNode(5), ValueNode(3))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .subtract)
-        #expect(rootNode?.inputs.count == 2)
+        #expect(dag.nodes.count == 3) // 5, 3, -
+
+        // Structural validation using helper functions
+        let value5Nodes = findValueNodes(dag, withValue: 5.0)
+        let value3Nodes = findValueNodes(dag, withValue: 3.0)
+        let subtractNodes = findNodesByFunction(dag, function: .subtract)
+
+        #expect(value5Nodes.count == 1, "Expected exactly one ValueNode with value 5")
+        #expect(value3Nodes.count == 1, "Expected exactly one ValueNode with value 3")
+        #expect(subtractNodes.count == 1, "Expected exactly one Subtract node")
+
+        // Validate connections: Subtract should receive inputs from both value nodes
+        let subtractNode = subtractNodes.first!
+        let expectedSubtractSources: [InputSource] = [.valueNode(5.0), .valueNode(3.0)]
+        #expect(validateInputSources(dag, nodeId: subtractNode.nodeId, expectedSources: expectedSubtractSources),
+                "Subtract node should receive inputs from ValueNode(5) and ValueNode(3)")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 2, "Expected 2 leaf nodes (value nodes)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .subtract, "Expected Subtract as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
+
+        // Validate execution path
+        let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
+        #expect(executionPath.contains(.subtract), "Execution path should include subtract")
+        #expect(executionPath.contains(.value), "Execution path should include value nodes")
     }
 
     @Test func parseNestedFunctionWithAddition() throws {
@@ -419,11 +675,45 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 4) // 5, 3, -, cos
-        #expect(projectData?.description == "Subtract(ValueNode(5), ValueNode(3)) -> CosNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .cos)
+        #expect(dag.nodes.count == 4) // 5, 3, -, cos
+
+        // Find all node types
+        let value5Nodes = findValueNodes(dag, withValue: 5.0)
+        let value3Nodes = findValueNodes(dag, withValue: 3.0)
+        let subtractNodes = findNodesByFunction(dag, function: .subtract)
+        let cosNodes = findNodesByFunction(dag, function: .cos)
+
+        // Verify exact counts
+        #expect(value5Nodes.count == 1, "Expected exactly one ValueNode with value 5")
+        #expect(value3Nodes.count == 1, "Expected exactly one ValueNode with value 3")
+        #expect(subtractNodes.count == 1, "Expected exactly one Subtract node")
+        #expect(cosNodes.count == 1, "Expected exactly one Cos node")
+
+        // Validate connections: Subtract ← ValueNode(5), ValueNode(3)
+        let subtractNode = subtractNodes.first!
+        let expectedSubtractSources: [InputSource] = [.valueNode(5.0), .valueNode(3.0)]
+        #expect(validateInputSources(dag, nodeId: subtractNode.nodeId, expectedSources: expectedSubtractSources),
+                "Subtract node should receive inputs from ValueNode(5) and ValueNode(3)")
+
+        // Validate connections: Cos ← Subtract
+        let cosNode = cosNodes.first!
+        let expectedCosSources: [InputSource] = [.nodeWithFunction(.subtract)]
+        #expect(validateInputSources(dag, nodeId: cosNode.nodeId, expectedSources: expectedCosSources),
+                "Cos node should receive input from Subtract node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 2, "Expected 2 leaf nodes (value nodes)")
+        #expect(nodeRoles.intermediateNodes.count == 1, "Expected 1 intermediate node (Subtract)")
+        #expect(nodeRoles.rootNode?.patch == .cos, "Expected Cos as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     @Test func verifyBinaryOperatorConnections() throws {
@@ -471,11 +761,42 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3) // 16, sqrt, cos
-        #expect(projectData?.description == "ValueNode(16) -> SquareRootNode -> CosNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .cos)
+        #expect(dag.nodes.count == 3) // 16, sqrt, cos
+
+        // Find all node types
+        let value16Nodes = findValueNodes(dag, withValue: 16.0)
+        let sqrtNodes = findNodesByFunction(dag, function: .sqrt)
+        let cosNodes = findNodesByFunction(dag, function: .cos)
+
+        // Verify exact counts
+        #expect(value16Nodes.count == 1, "Expected exactly one ValueNode with value 16")
+        #expect(sqrtNodes.count == 1, "Expected exactly one Sqrt node")
+        #expect(cosNodes.count == 1, "Expected exactly one Cos node")
+
+        // Validate connections: Sqrt ← ValueNode(16), Cos ← Sqrt
+        let sqrtNode = sqrtNodes.first!
+        let expectedSqrtSources: [InputSource] = [.valueNode(16.0)]
+        #expect(validateInputSources(dag, nodeId: sqrtNode.nodeId, expectedSources: expectedSqrtSources),
+                "Sqrt node should receive input from ValueNode(16)")
+
+        let cosNode = cosNodes.first!
+        let expectedCosSources: [InputSource] = [.nodeWithFunction(.sqrt)]
+        #expect(validateInputSources(dag, nodeId: cosNode.nodeId, expectedSources: expectedCosSources),
+                "Cos node should receive input from Sqrt node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.intermediateNodes.count == 1, "Expected 1 intermediate node (Sqrt)")
+        #expect(nodeRoles.rootNode?.patch == .cos, "Expected Cos as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     @Test func parseVarVariableDeclaration() throws {
@@ -486,11 +807,42 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3) // 4, sqrt, cos
-        #expect(projectData?.description == "ValueNode(4) -> SquareRootNode -> CosNode")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .cos)
+        #expect(dag.nodes.count == 3) // 4, sqrt, cos
+
+        // Find all node types
+        let value4Nodes = findValueNodes(dag, withValue: 4.0)
+        let sqrtNodes = findNodesByFunction(dag, function: .sqrt)
+        let cosNodes = findNodesByFunction(dag, function: .cos)
+
+        // Verify exact counts
+        #expect(value4Nodes.count == 1, "Expected exactly one ValueNode with value 4")
+        #expect(sqrtNodes.count == 1, "Expected exactly one Sqrt node")
+        #expect(cosNodes.count == 1, "Expected exactly one Cos node")
+
+        // Validate connections: Sqrt ← ValueNode(4), Cos ← Sqrt
+        let sqrtNode = sqrtNodes.first!
+        let expectedSqrtSources: [InputSource] = [.valueNode(4.0)]
+        #expect(validateInputSources(dag, nodeId: sqrtNode.nodeId, expectedSources: expectedSqrtSources),
+                "Sqrt node should receive input from ValueNode(4)")
+
+        let cosNode = cosNodes.first!
+        let expectedCosSources: [InputSource] = [.nodeWithFunction(.sqrt)]
+        #expect(validateInputSources(dag, nodeId: cosNode.nodeId, expectedSources: expectedCosSources),
+                "Cos node should receive input from Sqrt node")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 1, "Expected 1 leaf node (value node)")
+        #expect(nodeRoles.intermediateNodes.count == 1, "Expected 1 intermediate node (Sqrt)")
+        #expect(nodeRoles.rootNode?.patch == .cos, "Expected Cos as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     @Test func parseFloatVariableDeclaration() throws {
@@ -653,12 +1005,42 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3) // 5, 3, >
-        #expect(projectData?.description == "GreaterThan(ValueNode(5), ValueNode(3))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .greaterThan)
-        #expect(rootNode?.inputs.count == 2)
+        #expect(dag.nodes.count == 3) // 5, 3, >
+
+        // Find all node types
+        let value5Nodes = findValueNodes(dag, withValue: 5.0)
+        let value3Nodes = findValueNodes(dag, withValue: 3.0)
+        let greaterThanNodes = findNodesByFunction(dag, function: .greaterThan)
+
+        // Verify exact counts
+        #expect(value5Nodes.count == 1, "Expected exactly one ValueNode with value 5")
+        #expect(value3Nodes.count == 1, "Expected exactly one ValueNode with value 3")
+        #expect(greaterThanNodes.count == 1, "Expected exactly one GreaterThan node")
+
+        // Validate connections: GreaterThan should receive inputs from both value nodes
+        let greaterThanNode = greaterThanNodes.first!
+        let expectedGreaterThanSources: [InputSource] = [.valueNode(5.0), .valueNode(3.0)]
+        #expect(validateInputSources(dag, nodeId: greaterThanNode.nodeId, expectedSources: expectedGreaterThanSources),
+                "GreaterThan node should receive inputs from ValueNode(5) and ValueNode(3)")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 2, "Expected 2 leaf nodes (value nodes)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .greaterThan, "Expected GreaterThan as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
+
+        // Validate execution path
+        let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
+        #expect(executionPath.contains(.greaterThan), "Execution path should include greaterThan")
+        #expect(executionPath.contains(.value), "Execution path should include value nodes")
     }
 
     @Test func parseLessThan() throws {
@@ -666,12 +1048,42 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3) // 2, 10, <
-        #expect(projectData?.description == "LessThan(ValueNode(2), ValueNode(10))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .lessThan)
-        #expect(rootNode?.inputs.count == 2)
+        #expect(dag.nodes.count == 3) // 2, 10, <
+
+        // Find all node types
+        let value2Nodes = findValueNodes(dag, withValue: 2.0)
+        let value10Nodes = findValueNodes(dag, withValue: 10.0)
+        let lessThanNodes = findNodesByFunction(dag, function: .lessThan)
+
+        // Verify exact counts
+        #expect(value2Nodes.count == 1, "Expected exactly one ValueNode with value 2")
+        #expect(value10Nodes.count == 1, "Expected exactly one ValueNode with value 10")
+        #expect(lessThanNodes.count == 1, "Expected exactly one LessThan node")
+
+        // Validate connections: LessThan should receive inputs from both value nodes
+        let lessThanNode = lessThanNodes.first!
+        let expectedLessThanSources: [InputSource] = [.valueNode(2.0), .valueNode(10.0)]
+        #expect(validateInputSources(dag, nodeId: lessThanNode.nodeId, expectedSources: expectedLessThanSources),
+                "LessThan node should receive inputs from ValueNode(2) and ValueNode(10)")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 2, "Expected 2 leaf nodes (value nodes)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .lessThan, "Expected LessThan as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
+
+        // Validate execution path
+        let executionPath = traceExecutionPath(from: dag.resultNodeId, in: dag)
+        #expect(executionPath.contains(.lessThan), "Execution path should include lessThan")
+        #expect(executionPath.contains(.value), "Execution path should include value nodes")
     }
 
     @Test func parseEqual() throws {
@@ -682,12 +1094,37 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 3) // x(7), 5, ==
-        #expect(projectData?.description == "Equal(ValueNode(7), ValueNode(5))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .equal)
-        #expect(rootNode?.inputs.count == 2)
+        #expect(dag.nodes.count == 3) // x(7), 5, ==
+
+        // Find all node types
+        let value7Nodes = findValueNodes(dag, withValue: 7.0)
+        let value5Nodes = findValueNodes(dag, withValue: 5.0)
+        let equalNodes = findNodesByFunction(dag, function: .equal)
+
+        // Verify exact counts
+        #expect(value7Nodes.count == 1, "Expected exactly one ValueNode with value 7")
+        #expect(value5Nodes.count == 1, "Expected exactly one ValueNode with value 5")
+        #expect(equalNodes.count == 1, "Expected exactly one Equal node")
+
+        // Validate connections: Equal should receive inputs from both value nodes
+        let equalNode = equalNodes.first!
+        let expectedEqualSources: [InputSource] = [.valueNode(7.0), .valueNode(5.0)]
+        #expect(validateInputSources(dag, nodeId: equalNode.nodeId, expectedSources: expectedEqualSources),
+                "Equal node should receive inputs from ValueNode(7) and ValueNode(5)")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 2, "Expected 2 leaf nodes (value nodes)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .equal, "Expected Equal as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     // MARK: - Ternary Expression Tests
@@ -697,12 +1134,39 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 4) // true, 5, 10, ?:
-        #expect(projectData?.description == "OptionPicker(ValueNode(1), ValueNode(10), ValueNode(5))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .optionPicker)
-        #expect(rootNode?.inputs.count == 3)
+        #expect(dag.nodes.count == 4) // true, 5, 10, ?:
+
+        // Find all node types
+        let trueNodes = findValueNodes(dag, withValue: 1.0) // true = 1.0
+        let value5Nodes = findValueNodes(dag, withValue: 5.0)
+        let value10Nodes = findValueNodes(dag, withValue: 10.0)
+        let optionPickerNodes = findNodesByFunction(dag, function: .optionPicker)
+
+        // Verify exact counts
+        #expect(trueNodes.count == 1, "Expected exactly one ValueNode with value 1 (true)")
+        #expect(value5Nodes.count == 1, "Expected exactly one ValueNode with value 5")
+        #expect(value10Nodes.count == 1, "Expected exactly one ValueNode with value 10")
+        #expect(optionPickerNodes.count == 1, "Expected exactly one OptionPicker node")
+
+        // Validate connections: OptionPicker should receive condition (true), false value (10), true value (5)
+        let optionPickerNode = optionPickerNodes.first!
+        let expectedOptionPickerSources: [InputSource] = [.valueNode(1.0), .valueNode(10.0), .valueNode(5.0)]
+        #expect(validateInputSources(dag, nodeId: optionPickerNode.nodeId, expectedSources: expectedOptionPickerSources),
+                "OptionPicker node should receive condition (true), false value (10), and true value (5)")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 3, "Expected 3 leaf nodes (all value nodes)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .optionPicker, "Expected OptionPicker as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     @Test func parseComparisonTernary() throws {
@@ -875,12 +1339,39 @@ struct DAGFromCodeTests {
         let projectData = ProjectDataParser.parse(source)
 
         #expect(projectData != nil)
-        #expect(projectData?.graph.nodes.count == 4) // true, 5, 10, if-else
-        #expect(projectData?.description == "OptionPicker(ValueNode(1), ValueNode(10), ValueNode(5))")
+        guard let dag = projectData?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
 
-        let rootNode = projectData?.graph.getRootNode()
-        #expect(rootNode?.patch == .optionPicker)
-        #expect(rootNode?.inputs.count == 3)
+        #expect(dag.nodes.count == 4) // true, 5, 10, if-else
+
+        // Find all node types (true = 1.0 internally)
+        let trueNodes = findValueNodes(dag, withValue: 1.0)
+        let value5Nodes = findValueNodes(dag, withValue: 5.0)
+        let value10Nodes = findValueNodes(dag, withValue: 10.0)
+        let optionPickerNodes = findNodesByFunction(dag, function: .optionPicker)
+
+        // Verify exact counts
+        #expect(trueNodes.count == 1, "Expected exactly one ValueNode with value 1 (true)")
+        #expect(value5Nodes.count == 1, "Expected exactly one ValueNode with value 5")
+        #expect(value10Nodes.count == 1, "Expected exactly one ValueNode with value 10")
+        #expect(optionPickerNodes.count == 1, "Expected exactly one OptionPicker node")
+
+        // Validate connections: OptionPicker should receive condition, false value, true value
+        let optionPickerNode = optionPickerNodes.first!
+        let expectedSources: [InputSource] = [.valueNode(1.0), .valueNode(10.0), .valueNode(5.0)]
+        #expect(validateInputSources(dag, nodeId: optionPickerNode.nodeId, expectedSources: expectedSources),
+                "OptionPicker should receive condition (true), false value (10), true value (5)")
+
+        // Validate node roles
+        let nodeRoles = classifyNodesByRole(dag)
+        #expect(nodeRoles.leafNodes.count == 3, "Expected 3 leaf nodes (all value nodes)")
+        #expect(nodeRoles.intermediateNodes.count == 0, "Expected 0 intermediate nodes")
+        #expect(nodeRoles.rootNode?.patch == .optionPicker, "Expected OptionPicker as root node")
+
+        // Validate topological structure
+        #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
     }
 
     @Test func parseComparisonIfElse() throws {
