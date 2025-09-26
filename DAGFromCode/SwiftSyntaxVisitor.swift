@@ -22,7 +22,7 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
         guard let rootId = rootNodeId else {
             return ProjectData.empty()
         }
-        let dag = DAG(nodes: nodes, rootNodeId: rootId)
+        let dag = DAG(nodes: nodes, resultNodeId: rootId)
         return ProjectData(graph: dag, views: views)
     }
 

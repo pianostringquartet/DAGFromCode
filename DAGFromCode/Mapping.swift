@@ -28,6 +28,10 @@ struct DAG {
     func getNode(by id: UUID) -> DAGNodeType? {
         return nodes[id]
     }
+
+    func getRootNode() -> DAGNodeType? {
+        return nodes[resultNodeId]
+    }
 }
 
 // The result of parsing a Swift code string

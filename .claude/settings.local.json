@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcodebuild:*)",
+      "WebFetch(domain:swiftpackageindex.com)",
+      "WebFetch(domain:github.com)",
+      "Read(//Users/christianjclampitt/Library/Developer/Xcode/DerivedData/**)",
+      "WebSearch",
+      "Bash(open:*)",
+      "WebFetch(domain:swift-ast-explorer.com)",
+      "Read(//Users/christianjclampitt/Desktop/**)",
+      "Bash(cd:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

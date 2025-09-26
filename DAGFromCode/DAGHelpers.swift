@@ -120,19 +120,19 @@ extension OutputCoordinate {
 // MARK: - DAG extensions
 
 extension DAG {
-    static func empty(rootNodeId: UUID = UUID()) -> DAG {
-        DAG(nodes: [:], rootNodeId: rootNodeId)
+    static func empty(resultNodeId: UUID = UUID()) -> DAG {
+        DAG(nodes: [:], resultNodeId: resultNodeId)
     }
 
-    func addingNode(_ node: DAGNodeType, setAsRoot: Bool = false) -> DAG {
+    func addingNode(_ node: DAGNodeType, setAsResultNode: Bool = false) -> DAG {
         var newNodes = nodes
         newNodes[node.id] = node
-        let newRootId = setAsRoot ? node.id : rootNodeId
-        return DAG(nodes: newNodes, rootNodeId: newRootId)
+        let newResultNodeId = setAsResultNode ? node.id : self.resultNodeId
+        return DAG(nodes: newNodes, resultNodeId: newResultNodeId)
     }
 
     func settingRoot(_ nodeId: UUID) -> DAG {
-        DAG(nodes: nodes, rootNodeId: nodeId)
+        DAG(nodes: nodes, resultNodeId: nodeId)
     }
 }
 
@@ -143,8 +143,8 @@ extension ProjectData {
         ProjectData(graph: DAG.empty(), views: [])
     }
 
-    func addingNode(_ node: DAGNodeType, setAsRoot: Bool = false) -> ProjectData {
-        let newGraph = graph.addingNode(node, setAsRoot: setAsRoot)
+    func addingNode(_ node: DAGNodeType, setAsResultNode: Bool = false) -> ProjectData {
+        let newGraph = graph.addingNode(node, setAsResultNode: setAsResultNode)
         return ProjectData(graph: newGraph, views: views)
     }
 
