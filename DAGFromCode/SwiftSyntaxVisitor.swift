@@ -15,6 +15,7 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
     private var nodeStack: [UUID] = []
     private var depth: Int = 0
     private var variableValues: [String: Double] = [:]
+    private var variableNodes: [String: UUID] = [:]  // Maps variable names to their ValueNode UUIDs
 
     // MARK: - Public Interface
 
@@ -93,7 +94,12 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
 
     internal func storeVariable(_ name: String, value: Double) {
         variableValues[name] = value
-        print("\(indent())💾 Stored variable '\(name)' = \(value)")
+
+        // Create a ValueNode for this variable and register it
+        let nodeId = createValueNode(value)
+        variableNodes[name] = nodeId
+
+        print("\(indent())💾 Stored variable '\(name)' = \(value), created ValueNode: \(String(nodeId.uuidString.prefix(8)))")
         logVariableTable()
     }
 
@@ -304,10 +310,16 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
             print("\(indent())🔍 Looking up variable '\(referenceName)' in table")
 
             if let value = lookupVariable(referenceName) {
-                print("\(indent())🎯 Creating ValueNode for variable '\(referenceName)' with value \(value)")
-
-                // Create a ValueNode for this variable reference
-                let nodeId = createValueNode(value)
+                // Look up the existing ValueNode for this variable instead of creating a new one
+                let nodeId: UUID
+                if let existingNodeId = variableNodes[referenceName] {
+                    print("\(indent())🎯 Reusing existing ValueNode for variable '\(referenceName)': \(String(existingNodeId.uuidString.prefix(8)))")
+                    nodeId = existingNodeId
+                } else {
+                    print("\(indent())⚠️ Variable '\(referenceName)' not found in node registry, creating new ValueNode")
+                    nodeId = createValueNode(value)
+                    variableNodes[referenceName] = nodeId
+                }
 
                 if currentNodeStack.isEmpty {
                     // This is a standalone variable reference (root of expression)
