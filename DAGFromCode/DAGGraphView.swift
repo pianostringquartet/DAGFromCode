@@ -37,6 +37,7 @@ struct DAGGraphView: View {
             }
         }
         .background(Color(NSColor.controlBackgroundColor))
+        .id(dag.resultNodeId) // Force view recreation when DAG changes
     }
     
     private func calculateCanvasDimensions(levels: [[UUID]]) -> CGSize {

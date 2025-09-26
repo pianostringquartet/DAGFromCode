@@ -13,7 +13,7 @@ import SwiftParser
 // MARK: the entirety of the data we can pull from a Swift code string
 
 // A directed acyclic graph representing parsed Swift expressions
-struct DAG {
+struct DAG: Equatable {
     let nodes: [UUID: DAGNodeType] // Dictionary for O(1) node lookups
     let resultNodeId: UUID          // The node representing the final expression result (may have incoming edges)
 
@@ -64,7 +64,7 @@ enum PrototypeLayerKind: String, Equatable, Hashable, Identifiable {
 // MARK: nodes that appear in the DAG
 
 // Nodes that can comprise a DAG
-enum DAGNodeType {
+enum DAGNodeType: Equatable {
     case function(DAGFunctionNode),
          layerInput(DAGLayerInputNode)
     
