@@ -185,10 +185,17 @@ class ProjectDataParser {
         print("🔄 Folding expression tree using SwiftOperators...")
         let foldedExpr: ExprSyntax
         do {
-            foldedExpr = try OperatorTable.standardOperators.foldAll(expr).as(ExprSyntax.self)!
-            print("✅ Expression folded successfully")
-            print("📊 Folded expression type: \(type(of: foldedExpr))")
-            print("📋 Folded expression: \(foldedExpr)")
+            let foldedSyntax = try OperatorTable.standardOperators.foldAll(expr)
+            if let castedExpr = foldedSyntax.as(ExprSyntax.self) {
+                foldedExpr = castedExpr
+                print("✅ Expression folded successfully")
+                print("📊 Folded expression type: \(type(of: foldedExpr))")
+                print("📋 Folded expression: \(foldedExpr)")
+            } else {
+                print("⚠️ Folded syntax did not convert back to ExprSyntax (was: \(type(of: foldedSyntax)))")
+                print("⚠️ Falling back to original expression")
+                foldedExpr = expr
+            }
         } catch {
             print("❌ Failed to fold expression: \(error)")
             print("⚠️ Falling back to original expression")
