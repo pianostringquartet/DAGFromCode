@@ -5,91 +5,16 @@
 //  Created by Christian J Clampitt on 9/24/25.
 //
 
-#if os(macOS) && !targetEnvironment(macCatalyst)
-
 import SwiftUI
 
 struct DAGDebugView: View {
     @StateObject private var viewModel = DAGSourceEditorViewModel()
 
     var body: some View {
-        HSplitView {
-            // Left pane: Code editor
-            DAGSourceEditorPane(viewModel: viewModel)
-                .frame(minWidth: 300)
-
-            // Right pane: DAG visualization
-            VStack(alignment: .leading, spacing: 8) {
-                Text("DAG Structure")
-                    .font(.headline)
-                    .padding(.horizontal)
-                    .padding(.top)
-
-                ScrollView {
-                    if let projectData = viewModel.parsedProjectData {
-                        let dag = projectData.graph
-                        let layers = projectData.views
-
-                        VStack(alignment: .leading, spacing: 16) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                // DAG info header
-                                HStack {
-                                    Text("Nodes: \(dag.nodes.count)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                    if let rootNode = dag.getRootNode() {
-                                        Text("Root: \(rootNode.displayName)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                .padding(.bottom, 8)
-
-                                generateColoredTreeVisualization(dag)
-                            }
-
-                            Divider()
-
-                            SwiftUILayerListView(layers: layers)
-                        }
-                        .textSelection(.enabled)
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    } else if let error = viewModel.parseError {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Parse Error:")
-                                .font(.headline)
-                                .foregroundColor(.red)
-
-                            Text(error)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundColor(.secondary)
-                                .padding()
-                                .background(Color.red.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                        .padding()
-                    } else {
-                        Text("Enter Swift code to see DAG structure")
-                            .foregroundColor(.secondary)
-                            .italic()
-                            .padding()
-                    }
-                }
-                .background(Color(NSColor.textBackgroundColor))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                )
-                .padding(.horizontal)
-                .padding(.bottom)
+        splitLayout
+            .onAppear {
+                viewModel.parseImmediately()
             }
-            .frame(minWidth: 400)
-        }
-        .onAppear {
-            viewModel.parseImmediately()
-        }
     }
 
     private func generateColoredTreeVisualization(_ dag: DAG) -> some View {
@@ -510,6 +435,115 @@ struct DAGDebugView: View {
 
 }
 
+private extension DAGDebugView {
+    @ViewBuilder
+    var splitLayout: some View {
+        GeometryReader { geometry in
+            let isCompact = geometry.size.width < 900
+
+            Group {
+                if isCompact {
+                    VStack(spacing: 0) {
+                        sourcePane
+                            .frame(maxWidth: .infinity, maxHeight: geometry.size.height * 0.45)
+
+                        Divider()
+
+                        dagPane
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                } else {
+                    HStack(spacing: 0) {
+                        sourcePane
+                            .frame(maxWidth: min(geometry.size.width * 0.35, 420), maxHeight: .infinity)
+
+                        Divider()
+
+                        dagPane
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            }
+        }
+    }
+
+    var sourcePane: some View {
+        DAGSourceEditorPane(viewModel: viewModel)
+            .frame(minWidth: 0, maxWidth: 400)
+    }
+
+    @ViewBuilder
+    var dagPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("DAG Structure")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            ScrollView {
+                if let projectData = viewModel.parsedProjectData {
+                    let dag = projectData.graph
+                    let layers = projectData.views
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            // DAG info header
+                            HStack {
+                                Text("Nodes: \(dag.nodes.count)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                if let rootNode = dag.getRootNode() {
+                                    Text("Root: \(rootNode.displayName)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.bottom, 8)
+
+                            generateColoredTreeVisualization(dag)
+                        }
+
+                        Divider()
+
+                        SwiftUILayerListView(layers: layers)
+                    }
+                    .textSelection(.enabled)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else if let error = viewModel.parseError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Parse Error:")
+                            .font(.headline)
+                            .foregroundColor(.red)
+
+                        Text(error)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .padding()
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                    .padding()
+                } else {
+                    Text("Enter Swift code to see DAG structure")
+                        .foregroundColor(.secondary)
+                        .italic()
+                        .padding()
+                }
+            }
+            .background(Color(.secondarySystemBackground))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color(.separator).opacity(0.3), lineWidth: 1)
+            )
+            .padding(.horizontal)
+            .padding(.bottom)
+        }
+        .frame(minWidth: 0)
+    }
+}
+
 struct SwiftUILayerListView: View {
     let layers: [PrototypeLayer]
 
@@ -564,7 +598,7 @@ private struct SwiftUILayerListRow: View {
             SwiftUILayerRenderedPreview(layer: layer)
         }
         .padding(10)
-        .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
+        .background(Color(.secondarySystemBackground))
         .cornerRadius(8)
     }
 }
@@ -613,7 +647,7 @@ private struct SwiftUILayerRenderedPreview: View {
 
             ZStack {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(NSColor.windowBackgroundColor))
+                    .fill(Color.secondary)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
@@ -745,19 +779,3 @@ private extension String {
     DAGDebugView()
         .frame(minWidth: 800, minHeight: 600)
 }
-
-#else
-
-import SwiftUI
-
-struct DAGDebugView: View {
-    var body: some View {
-        Text("DAG Debugger is available on Mac (non-Catalyst) builds.")
-            .font(.headline)
-            .foregroundColor(.secondary)
-            .multilineTextAlignment(.center)
-            .padding()
-    }
-}
-
-#endif
