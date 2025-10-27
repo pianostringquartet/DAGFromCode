@@ -11,75 +11,10 @@ struct DAGDebugView: View {
     @StateObject private var viewModel = DAGSourceEditorViewModel()
 
     var body: some View {
-        HSplitView {
-            // Left pane: Code editor
-            DAGSourceEditorPane(viewModel: viewModel)
-                .frame(minWidth: 300)
-
-            // Right pane: DAG visualization
-            VStack(alignment: .leading, spacing: 8) {
-                Text("DAG Structure")
-                    .font(.headline)
-                    .padding(.horizontal)
-                    .padding(.top)
-
-                ScrollView {
-                    if let projectData = viewModel.parsedProjectData {
-                        let dag = projectData.graph
-                        VStack(alignment: .leading, spacing: 4) {
-                            // DAG info header
-                            HStack {
-                                Text("Nodes: \(dag.nodes.count)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                if let rootNode = dag.getRootNode() {
-                                    Text("Root: \(rootNode.displayName)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .padding(.bottom, 8)
-
-                            generateColoredTreeVisualization(dag)
-                        }
-                        .textSelection(.enabled)
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    } else if let error = viewModel.parseError {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Parse Error:")
-                                .font(.headline)
-                                .foregroundColor(.red)
-
-                            Text(error)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundColor(.secondary)
-                                .padding()
-                                .background(Color.red.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                        .padding()
-                    } else {
-                        Text("Enter Swift code to see DAG structure")
-                            .foregroundColor(.secondary)
-                            .italic()
-                            .padding()
-                    }
-                }
-                .background(Color(NSColor.textBackgroundColor))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                )
-                .padding(.horizontal)
-                .padding(.bottom)
+        splitLayout
+            .onAppear {
+                viewModel.parseImmediately()
             }
-            .frame(minWidth: 400)
-        }
-        .onAppear {
-            viewModel.parseImmediately()
-        }
     }
 
     private func generateColoredTreeVisualization(_ dag: DAG) -> some View {
@@ -498,6 +433,346 @@ struct DAGDebugView: View {
         }
     }
 
+}
+
+private extension DAGDebugView {
+    @ViewBuilder
+    var splitLayout: some View {
+        GeometryReader { geometry in
+            let isCompact = geometry.size.width < 900
+
+            Group {
+                if isCompact {
+                    VStack(spacing: 0) {
+                        sourcePane
+                            .frame(maxWidth: .infinity, maxHeight: geometry.size.height * 0.45)
+
+                        Divider()
+
+                        dagPane
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                } else {
+                    HStack(spacing: 0) {
+                        sourcePane
+                            .frame(maxWidth: min(geometry.size.width * 0.35, 420), maxHeight: .infinity)
+
+                        Divider()
+
+                        dagPane
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            }
+        }
+    }
+
+    var sourcePane: some View {
+        DAGSourceEditorPane(viewModel: viewModel)
+            .frame(minWidth: 0, maxWidth: 400)
+    }
+
+    @ViewBuilder
+    var dagPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("DAG Structure")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+
+            ScrollView {
+                if let projectData = viewModel.parsedProjectData {
+                    let dag = projectData.graph
+                    let layers = projectData.views
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            // DAG info header
+                            HStack {
+                                Text("Nodes: \(dag.nodes.count)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                if let rootNode = dag.getRootNode() {
+                                    Text("Root: \(rootNode.displayName)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.bottom, 8)
+
+                            generateColoredTreeVisualization(dag)
+                        }
+
+                        Divider()
+
+                        SwiftUILayerListView(layers: layers)
+                    }
+                    .textSelection(.enabled)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else if let error = viewModel.parseError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Parse Error:")
+                            .font(.headline)
+                            .foregroundColor(.red)
+
+                        Text(error)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .padding()
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                    .padding()
+                } else {
+                    Text("Enter Swift code to see DAG structure")
+                        .foregroundColor(.secondary)
+                        .italic()
+                        .padding()
+                }
+            }
+            .background(Color(.secondarySystemBackground))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color(.separator).opacity(0.3), lineWidth: 1)
+            )
+            .padding(.horizontal)
+            .padding(.bottom)
+        }
+        .frame(minWidth: 0)
+    }
+}
+
+struct SwiftUILayerListView: View {
+    let layers: [PrototypeLayer]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("SwiftUI Layers")
+                .font(.headline)
+
+            if layers.isEmpty {
+                Text("No SwiftUI layers detected")
+                    .foregroundColor(.secondary)
+                    .italic()
+            } else {
+                ForEach(Array(layers.enumerated()), id: \.element.nodeId) { index, layer in
+                    SwiftUILayerListRow(index: index + 1, layer: layer)
+                }
+            }
+        }
+        .textSelection(.enabled)
+    }
+}
+
+private struct SwiftUILayerListRow: View {
+    let index: Int
+    let layer: PrototypeLayer
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("\(index). \(layer.layer.displayLabel)")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Text("ID: \(layer.nodeId.shortIdentifier)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                if layer.modifiers.isEmpty {
+                    Text("No modifiers recorded")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(layer.modifiers.enumerated()), id: \.offset) { modifierIndex, modifier in
+                            SwiftUILayerModifierRow(index: modifierIndex + 1, modifier: modifier)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            SwiftUILayerRenderedPreview(layer: layer)
+        }
+        .padding(10)
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(8)
+    }
+}
+
+private struct SwiftUILayerModifierRow: View {
+    let index: Int
+    let modifier: PrototypeLayerModifier
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(index). \(modifier.kind.displayLabel)")
+                .font(.caption)
+                .fontWeight(.semibold)
+
+            if let description = modifier.argumentDescription, !description.isEmpty {
+                Text(description)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            if !modifier.numericPayloads.isEmpty {
+                Text(numericSummary)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private var numericSummary: String {
+        let values = modifier.numericPayloads.map { $0.cleanNumericString }.joined(separator: ", ")
+        let prefix = modifier.numericPayloads.count == 1 ? "Value" : "Values"
+        return "\(prefix): \(values)"
+    }
+}
+
+private struct SwiftUILayerRenderedPreview: View {
+    let layer: PrototypeLayer
+
+    var body: some View {
+        let parameters = SwiftUILayerPreviewParameters(layer: layer)
+
+        VStack(spacing: 6) {
+            Text("Preview")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.secondary)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                    )
+
+                renderedLayer(using: parameters)
+                    .padding(12)
+            }
+            .frame(width: 160, height: 120)
+        }
+    }
+
+    @ViewBuilder
+    private func renderedLayer(using parameters: SwiftUILayerPreviewParameters) -> some View {
+        switch layer.layer {
+        case .rectangle:
+            Rectangle()
+                .fill(parameters.fillColor ?? SwiftUILayerPreviewParameters.defaultFillColor)
+                .opacity(parameters.opacity)
+        case .ellipse:
+            Ellipse()
+                .fill(parameters.fillColor ?? SwiftUILayerPreviewParameters.defaultFillColor)
+                .opacity(parameters.opacity)
+        }
+    }
+}
+
+private struct SwiftUILayerPreviewParameters {
+    let fillColor: Color?
+    let opacity: Double
+
+    static let defaultFillColor = Color.accentColor.opacity(0.7)
+
+    init(layer: PrototypeLayer) {
+        var resolvedFill: Color?
+        var resolvedOpacity: Double = 1.0
+
+        for modifier in layer.modifiers {
+            switch modifier.kind {
+            case .fill:
+                resolvedFill = Color.fromPrototypeArgument(modifier.argumentDescription)
+            case .opacity:
+                if let value = modifier.numericPayloads.first {
+                    resolvedOpacity *= value
+                }
+            case .scaleEffect:
+                break
+            }
+        }
+
+        self.fillColor = resolvedFill
+        self.opacity = resolvedOpacity
+    }
+}
+
+private extension Color {
+    static func fromPrototypeArgument(_ description: String?) -> Color? {
+        guard let raw = description?.trimmingCharacters(in: .whitespacesAndNewlines),
+              raw.hasPrefix("Color.") else {
+            return nil
+        }
+
+        let suffix = raw.dropFirst("Color.".count)
+
+        switch suffix {
+        case "red": return .red
+        case "blue": return .blue
+        case "green": return .green
+        case "orange": return .orange
+        case "yellow": return .yellow
+        case "purple": return .purple
+        case "pink": return .pink
+        case "black": return .black
+        case "white": return .white
+        case "gray": return .gray
+        default:
+            return nil
+        }
+    }
+}
+
+private extension PrototypeLayerKind {
+    var displayLabel: String {
+        rawValue.capitalized
+    }
+}
+
+private extension PrototypeLayerInputKind {
+    var displayLabel: String {
+        switch self {
+        case .opacity: return "Opacity"
+        case .scaleEffect: return "Scale Effect"
+        case .fill: return "Fill"
+        }
+    }
+}
+
+private extension UUID {
+    var shortIdentifier: String {
+        String(uuidString.prefix(6))
+    }
+}
+
+private extension Double {
+    var cleanNumericString: String {
+        let formatted = String(format: "%.3f", self)
+        return formatted.trimmingTrailingZeros()
+    }
+}
+
+private extension String {
+    func trimmingTrailingZeros() -> String {
+        guard contains(".") else { return self }
+
+        var trimmed = self
+        while trimmed.last == "0" {
+            trimmed.removeLast()
+        }
+
+        if trimmed.last == "." {
+            trimmed.removeLast()
+        }
+
+        return trimmed
+    }
 }
 
 #Preview {

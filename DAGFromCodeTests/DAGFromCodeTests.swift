@@ -2076,4 +2076,180 @@ struct DAGFromCodeTests {
         }.sorted()
         #expect(values == [8.0, 12.0], "Expected values [8.0, 12.0] but got \(values)")
     }
+
+    // MARK: - SwiftUI view parsing
+
+    @Test func parseRectangleOpacityModifierCapturesLayerMetadata() throws {
+        let source = "Rectangle().opacity(0.5)"
+        let projectData = ProjectDataParser.parse(source)
+
+        #expect(projectData != nil)
+        guard let projectData = projectData else { return }
+
+        #expect(projectData.views.count == 1, "Expected one SwiftUI layer")
+
+        guard let layer = projectData.views.first else {
+            #expect(Bool(false), "Missing SwiftUI layer entry")
+            return
+        }
+
+        #expect(layer.layer == .rectangle)
+        #expect(layer.modifiers.count == 1)
+
+        let modifier = layer.modifiers[0]
+        #expect(modifier.kind == .opacity)
+        #expect(modifier.argumentDescription == "0.5")
+        #expect(modifier.numericPayloads == [0.5])
+    }
+
+    @Test func parseEllipseFillModifierCapturesArgumentDescription() throws {
+        let source = "Ellipse().fill(Color.red)"
+        let projectData = ProjectDataParser.parse(source)
+
+        #expect(projectData != nil)
+        guard let projectData = projectData else { return }
+
+        #expect(projectData.views.count == 1, "Expected one SwiftUI layer")
+
+        guard let layer = projectData.views.first else {
+            #expect(Bool(false), "Missing SwiftUI layer entry")
+            return
+        }
+
+        #expect(layer.layer == .ellipse)
+        #expect(layer.modifiers.count == 1)
+
+        let modifier = layer.modifiers[0]
+        #expect(modifier.kind == .fill)
+        #expect(modifier.argumentDescription == "Color.red")
+        #expect(modifier.numericPayloads.isEmpty)
+    }
+
+    @Test func parseRectangleFillOpacityChainPreservesModifierOrder() throws {
+        let source = "Rectangle().fill(Color.blue).opacity(0.4)"
+        let projectData = ProjectDataParser.parse(source)
+
+        #expect(projectData != nil)
+        guard let projectData = projectData else { return }
+
+        #expect(projectData.views.count == 1, "Expected one SwiftUI layer")
+
+        guard let layer = projectData.views.first else {
+            #expect(Bool(false), "Missing SwiftUI layer entry")
+            return
+        }
+
+        #expect(layer.layer == .rectangle)
+        #expect(layer.modifiers.count == 2, "Expected two modifiers in declaration order")
+
+        let firstModifier = layer.modifiers[0]
+        #expect(firstModifier.kind == .fill)
+        #expect(firstModifier.argumentDescription == "Color.blue")
+        #expect(firstModifier.numericPayloads.isEmpty)
+
+        let secondModifier = layer.modifiers[1]
+        #expect(secondModifier.kind == .opacity)
+        #expect(secondModifier.argumentDescription == "0.4")
+        #expect(secondModifier.numericPayloads == [0.4])
+    }
+
+    @Test func parseRectangleOpacityExpressionEvaluatesNumericPayload() throws {
+        let source = """
+        let x = 0.25
+        let y = 0.25
+        Rectangle().opacity(x + y)
+        """
+
+        let projectData = ProjectDataParser.parse(source)
+
+        #expect(projectData != nil)
+        guard let projectData = projectData else { return }
+
+        #expect(projectData.views.count == 1)
+
+        let layer = projectData.views[0]
+        #expect(layer.layer == .rectangle)
+        #expect(layer.modifiers.count == 1)
+
+        let modifier = layer.modifiers[0]
+        #expect(modifier.kind == .opacity)
+        #expect(modifier.argumentDescription == "x + y")
+        #expect(modifier.numericPayloads == [0.5])
+
+        let dag = projectData.graph
+        guard let rootNode = dag.nodes[dag.resultNodeId] else {
+            #expect(Bool(false), "Expected root node to exist")
+            return
+        }
+
+        guard case .layerInput(let layerInputNode) = rootNode else {
+            #expect(Bool(false), "Expected root node to be a layer input")
+            return
+        }
+
+        guard case .incomingEdge(let incoming) = layerInputNode.input.input else {
+            #expect(Bool(false), "Expected opacity layer input to reference upstream node")
+            return
+        }
+
+        guard let upstreamNode = dag.nodes[incoming.nodeId],
+              case .function(let functionNode) = upstreamNode else {
+            #expect(Bool(false), "Expected upstream node to be a function")
+            return
+        }
+
+        #expect(functionNode.patch == .add, "Opacity input should come from add node")
+        #expect(functionNode.inputs.count == 2, "Add node should have two inputs")
+    }
+
+    @Test func parseRectangleOpacityExpressionResolvesIntermediateBinding() throws {
+        let source = """
+        let x = 0.25
+        let y = 0.25
+        let z = x + y
+        Rectangle().opacity(z)
+        """
+
+        let projectData = ProjectDataParser.parse(source)
+
+        #expect(projectData != nil)
+        guard let projectData = projectData else { return }
+
+        #expect(projectData.views.count == 1)
+
+        let layer = projectData.views[0]
+        #expect(layer.layer == .rectangle)
+        #expect(layer.modifiers.count == 1)
+
+        let modifier = layer.modifiers[0]
+        #expect(modifier.kind == .opacity)
+        #expect(modifier.argumentDescription == "z")
+        #expect(modifier.numericPayloads == [0.5])
+
+        let dag = projectData.graph
+
+        let addNodes = dag.nodes.values.compactMap { node -> DAGFunctionNode? in
+            guard case .function(let functionNode) = node, functionNode.patch == .add else {
+                return nil
+            }
+            return functionNode
+        }
+        #expect(addNodes.count == 1, "Expected exactly one add node for z binding")
+
+        guard let rootNode = dag.nodes[dag.resultNodeId],
+              case .layerInput(let layerInputNode) = rootNode else {
+            #expect(Bool(false), "Expected root node to be layer input")
+            return
+        }
+
+        guard case .incomingEdge(let incoming) = layerInputNode.input.input,
+              let upstreamNode = dag.nodes[incoming.nodeId],
+              case .function(let functionNode) = upstreamNode else {
+            #expect(Bool(false), "Expected opacity input to reference add node")
+            return
+        }
+
+        #expect(functionNode.patch == .add, "Opacity modifier should connect to the z add node")
+        #expect(functionNode.inputs.count == 2)
+    }
 }

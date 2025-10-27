@@ -227,6 +227,7 @@ extension PrototypeLayerInputKind {
         switch self {
         case .opacity: return "Opacity"
         case .scaleEffect: return "Scale Effect"
+        case .fill: return "Fill"
         }
     }
 }
