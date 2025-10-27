@@ -97,7 +97,7 @@ struct DAGDebugView: View {
             case .value:
                 if let input = functionNode.inputs.first,
                    case .value(let val) = input.input {
-                    return "ValueNode(\(Int(val)))"
+                    return "ValueNode(\(val.cleanNumericString))"
                 }
                 return "ValueNode(?)"
             case .sin:
@@ -748,30 +748,6 @@ private extension PrototypeLayerInputKind {
 private extension UUID {
     var shortIdentifier: String {
         String(uuidString.prefix(6))
-    }
-}
-
-private extension Double {
-    var cleanNumericString: String {
-        let formatted = String(format: "%.3f", self)
-        return formatted.trimmingTrailingZeros()
-    }
-}
-
-private extension String {
-    func trimmingTrailingZeros() -> String {
-        guard contains(".") else { return self }
-
-        var trimmed = self
-        while trimmed.last == "0" {
-            trimmed.removeLast()
-        }
-
-        if trimmed.last == "." {
-            trimmed.removeLast()
-        }
-
-        return trimmed
     }
 }
 
