@@ -59,7 +59,7 @@ extension ProjectData: CustomStringConvertible {
                 case .value:
                     if let firstInput = functionNode.inputs.first,
                        case .value(let val) = firstInput.input {
-                        let desc = "ValueNode(\(Int(val)))"
+                        let desc = "ValueNode(\(val.cleanNumericString))"
                         print("\(indent)   -> \(desc)")
                         return desc
                     }

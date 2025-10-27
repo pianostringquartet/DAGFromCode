@@ -354,7 +354,7 @@ struct NodeView: View {
                    functionNode.patch == .value,
                    let input = functionNode.inputs.first,
                    case .value(let val) = input.input {
-                    Text("\(Int(val))")
+                    Text(val.cleanNumericString)
                         .font(.title)
                         .foregroundColor(.secondary)
                 }

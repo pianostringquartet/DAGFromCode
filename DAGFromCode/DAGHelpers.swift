@@ -231,3 +231,29 @@ extension PrototypeLayerInputKind {
         }
     }
 }
+
+// MARK: - Numeric formatting helpers
+
+extension Double {
+    var cleanNumericString: String {
+        let formatted = String(format: "%.3f", self)
+        return formatted.trimmingTrailingZeros()
+    }
+}
+
+extension String {
+    func trimmingTrailingZeros() -> String {
+        guard contains(".") else { return self }
+
+        var trimmed = self
+        while trimmed.last == "0" {
+            trimmed.removeLast()
+        }
+
+        if trimmed.last == "." {
+            trimmed.removeLast()
+        }
+
+        return trimmed
+    }
+}
