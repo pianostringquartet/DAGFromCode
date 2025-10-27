@@ -46,8 +46,35 @@ struct ProjectData {
 struct PrototypeLayer: Equatable, Hashable {
     let nodeId: UUID
     let layer: PrototypeLayerKind
+    var modifiers: [PrototypeLayerModifier]
+
+    init(
+        nodeId: UUID,
+        layer: PrototypeLayerKind,
+        modifiers: [PrototypeLayerModifier] = []
+    ) {
+        self.nodeId = nodeId
+        self.layer = layer
+        self.modifiers = modifiers
+    }
     
     // Simplifying assumption: a layer input appears in the DAG just if it has an incoming edge or a non-default value.
+}
+
+struct PrototypeLayerModifier: Equatable, Hashable {
+    let kind: PrototypeLayerInputKind
+    let argumentDescription: String?
+    let numericPayloads: [Double]
+
+    init(
+        kind: PrototypeLayerInputKind,
+        argumentDescription: String? = nil,
+        numericPayloads: [Double] = []
+    ) {
+        self.kind = kind
+        self.argumentDescription = argumentDescription
+        self.numericPayloads = numericPayloads
+    }
 }
 
 // i.e. Layer or SwiftUI view
@@ -141,7 +168,7 @@ struct DAGLayerInputNode: Equatable, Hashable {
 // i.e. LayerInput or SwiftUI view modififer
 // note: LayerInputs can appear in the DAG as nodes
 enum PrototypeLayerInputKind: String, Equatable, Hashable {
-    case opacity, scaleEffect
+    case opacity, scaleEffect, fill
 }
 
 // MARK: node inputs and outputs
@@ -179,6 +206,5 @@ struct OutputCoordinate: Equatable, Hashable {
     let nodeId: UUID
     let portId: Int // 0 = first output, 1 = second output, etc.
 }
-
 
 

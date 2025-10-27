@@ -5,6 +5,8 @@
 //  Created by Christian J Clampitt on 9/25/25.
 //
 
+#if os(macOS) && !targetEnvironment(macCatalyst)
+
 import SwiftUI
 
 struct DAGDebugViewWithGraph: View {
@@ -25,7 +27,9 @@ struct DAGDebugViewWithGraph: View {
 
                 if let projectData = viewModel.parsedProjectData {
                     let dag = projectData.graph
-                    VStack(alignment: .leading, spacing: 4) {
+                    let layers = projectData.views
+
+                    VStack(alignment: .leading, spacing: 8) {
                         // DAG info header
                         HStack {
                             Text("Nodes: \(dag.nodes.count)")
@@ -41,9 +45,17 @@ struct DAGDebugViewWithGraph: View {
                         .padding(.horizontal)
                         .padding(.bottom, 8)
 
-                        DAGGraphView(dag: dag)
+                        HStack(alignment: .top, spacing: 16) {
+                            DAGGraphView(dag: dag, layers: layers)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                            SwiftUILayerSidebar(layers: layers)
+                                .frame(maxWidth: 300)
+                                .padding(.trailing)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 } else if let error = viewModel.parseError {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Parse Error:")
@@ -73,7 +85,42 @@ struct DAGDebugViewWithGraph: View {
     }
 }
 
+private struct SwiftUILayerSidebar: View {
+    let layers: [PrototypeLayer]
+
+    var body: some View {
+        ScrollView {
+            SwiftUILayerListView(layers: layers)
+                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color(NSColor.textBackgroundColor))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
 #Preview {
     DAGDebugViewWithGraph()
         .frame(minWidth: 1000, minHeight: 700)
 }
+
+#else
+
+import SwiftUI
+
+struct DAGDebugViewWithGraph: View {
+    var body: some View {
+        Text("Graph debugger is available on Mac (non-Catalyst) builds.")
+            .font(.headline)
+            .foregroundColor(.secondary)
+            .multilineTextAlignment(.center)
+            .padding()
+    }
+}
+
+#endif

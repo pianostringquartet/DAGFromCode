@@ -152,6 +152,15 @@ struct DAGSourceEditorPane: View {
     private var examplesMenu: some View {
         Menu("Examples") {
             Menu("Basic") {
+                Button("SwiftUI Rectangle Opacity") {
+                    viewModel.loadExample("""
+                    let x = 0.25
+                    let y = 0.25
+                    let z = x + y
+                    Rectangle().opacity(z)
+                    """)
+                }
+
                 Button("Simple Addition") {
                     viewModel.loadExample("""
                     let x = 8
@@ -272,6 +281,8 @@ struct DAGSourceEditorPane: View {
                 }
             }
         }
+#if os(macOS)
         .menuStyle(.borderedButton)
+#endif
     }
 }

@@ -1,0 +1,16 @@
+# Agent agent-a2 work log
+# Format: 2025-10-26T18:45:58-06:00 | status | note
+2025-10-26T18:49:23-06:00 | start | picked up subplan
+2025-10-26T19:00:37-06:00 | progress | surfaced SwiftUI layers in debug panes and added layer-parent labels in DAG graph
+2025-10-26T19:00:42-06:00 | test-failed | xcodebuild test (iPhone 15/16) unavailable; iOS sim build fails on .borderedButton in DAGSourceEditorViewModel.swift
+2025-10-26T19:01:45-06:00 | complete | debug ui and tests delivered
+2025-10-26T20:13:38-06:00 | start | picked up agent-a2 follow-up tasks
+2025-10-26T20:23:26-06:00 | progress | incorporating evaluated opacity preview work
+2025-10-26T20:30:52-06:00 | test-failed | xcodebuild test (iPhone 16/OS 18.6) blocked by borderedButton availability
+2025-10-26T20:32:34-06:00 | complete | opacity preview + expression evaluation available in debug panel
+2025-10-26T21:16:36-06:00 | test-pass | xcodebuild test (macOS) succeeded; iOS sim still blocked by borderedButton style
+2025-10-26T21:17:52-06:00 | needs-integration | must gate menuStyle(.borderedButton) in DAGSourceEditorViewModel.swift for iOS builds
+2025-10-26T21:23:49-06:00 | test-pass | xcodebuild test (iPhone 16 / iOS 18.6)
+2025-10-26T21:35:41-06:00 | progress | gated mac-only debug views + platform color shim for iOS builds
+2025-10-26T21:45:36-06:00 | test-failed | xcodebuild test (macOS destination) blocked by provisioning profile for com.stitch.DAGFromCode
+2025-10-27T10:05:12-06:00 | summary | prepared debug previews, numeric eval, cross-platform fixes

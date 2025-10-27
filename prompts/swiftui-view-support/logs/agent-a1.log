@@ -1,0 +1,12 @@
+# Agent agent-a1 work log
+# Format: 2025-10-26T18:45:58-06:00 | status | note
+2025-10-26T18:49:16-06:00 | start | picked up subplan
+2025-10-26T18:55:41-06:00 | note | xcodebuild build failed: SwiftUI .borderedButton unavailable on iOS simulator target
+2025-10-26T18:56:46-06:00 | build | xcodebuild -scheme DAGFromCode -destination 'platform=macOS' build succeeded
+2025-10-26T18:56:51-06:00 | phase | foundation scaffolding complete
+2025-10-26T19:00:13-06:00 | note | reverted earlier tweak in DAGHelpers.swift to stay within owned paths; adding display helpers in Mapping.swift instead
+2025-10-26T19:05:06-06:00 | needs-integration | updating DAGHelpers.swift to include .fill display case for PrototypeLayerInputKind
+2025-10-26T19:07:25-06:00 | build | xcodebuild -scheme DAGFromCode -destination 'platform=macOS' build succeeded after SwiftUI parser updates
+2025-10-26T19:08:13-06:00 | note | xcodebuild test (iOS sim) failed: macOS-only UI types (HSplitView/NSColor) limit iOS target
+2025-10-26T19:09:04-06:00 | test | xcodebuild test -scheme DAGFromCode -destination 'platform=macOS' passed
+2025-10-26T19:09:33-06:00 | complete | parser scope delivered

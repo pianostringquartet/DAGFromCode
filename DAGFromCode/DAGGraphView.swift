@@ -6,9 +6,15 @@
 //
 
 import SwiftUI
+#if os(macOS) && !targetEnvironment(macCatalyst)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 struct DAGGraphView: View {
     let dag: DAG
+    private let layerLookup: [UUID: PrototypeLayer]
     private let nodeWidth: CGFloat = 200
     private let nodeHeight: CGFloat = 100
     private let levelSpacing: CGFloat = 300
@@ -16,6 +22,11 @@ struct DAGGraphView: View {
     private let scrollPadding: CGFloat = 100
 
     @State private var nodePositions: [UUID: CGPoint] = [:]
+
+    init(dag: DAG, layers: [PrototypeLayer] = []) {
+        self.dag = dag
+        self.layerLookup = Dictionary(uniqueKeysWithValues: layers.map { ($0.nodeId, $0) })
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -32,11 +43,12 @@ struct DAGGraphView: View {
                     levelSpacing: levelSpacing,
                     nodeSpacing: nodeSpacing,
                     scrollPadding: scrollPadding,
+                    layerLookup: layerLookup,
                     nodePositions: $nodePositions
                 )
             }
         }
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(Color.platformControlBackground)
         .id(dag.resultNodeId) // Force view recreation when DAG changes
     }
     
@@ -154,6 +166,7 @@ struct DAGCanvasView: View {
     let levelSpacing: CGFloat
     let nodeSpacing: CGFloat
     let scrollPadding: CGFloat
+    let layerLookup: [UUID: PrototypeLayer]
     @Binding var nodePositions: [UUID: CGPoint]
     
     var body: some View {
@@ -179,6 +192,7 @@ struct DAGCanvasView: View {
                 levelSpacing: levelSpacing,
                 nodeSpacing: nodeSpacing,
                 scrollPadding: scrollPadding,
+                layerLookup: layerLookup,
                 nodePositions: $nodePositions
             )
         }
@@ -215,6 +229,18 @@ struct DAGEdgesLayer: View {
     }
 }
 
+private extension Color {
+    static var platformControlBackground: Color {
+#if os(macOS) && !targetEnvironment(macCatalyst)
+        Color(NSColor.controlBackgroundColor)
+#elseif canImport(UIKit)
+        Color(UIColor.systemBackground)
+#else
+        Color.gray.opacity(0.1)
+#endif
+    }
+}
+
 struct DAGNodesLayer: View {
     let dag: DAG
     let levels: [[UUID]]
@@ -223,6 +249,7 @@ struct DAGNodesLayer: View {
     let levelSpacing: CGFloat
     let nodeSpacing: CGFloat
     let scrollPadding: CGFloat
+    let layerLookup: [UUID: PrototypeLayer]
     @Binding var nodePositions: [UUID: CGPoint]
     
     var body: some View {
@@ -239,6 +266,7 @@ struct DAGNodesLayer: View {
                     levelSpacing: levelSpacing,
                     nodeSpacing: nodeSpacing,
                     scrollPadding: scrollPadding,
+                    layerLookup: layerLookup,
                     nodePositions: $nodePositions
                 )
             }
@@ -257,6 +285,7 @@ struct DAGNodeWrapper: View {
     let levelSpacing: CGFloat
     let nodeSpacing: CGFloat
     let scrollPadding: CGFloat
+    let layerLookup: [UUID: PrototypeLayer]
     @Binding var nodePositions: [UUID: CGPoint]
     @State private var dragStartPosition: CGPoint = .zero
     
@@ -267,8 +296,8 @@ struct DAGNodeWrapper: View {
                 y: calculateNodeY(nodeIndex: nodeIndex, totalNodesInLevel: totalNodesInLevel) + scrollPadding
             )
             let currentPosition = nodePositions[nodeId] ?? defaultPosition
-            
-            NodeView(node: node)
+
+            NodeView(node: node, parentLayer: layerLookup[node.nodeId])
                 .frame(width: nodeWidth, height: nodeHeight)
                 .position(currentPosition)
                 .gesture(
@@ -306,6 +335,7 @@ struct DAGNodeWrapper: View {
 
 struct NodeView: View {
     let node: DAGNodeType
+    let parentLayer: PrototypeLayer?
 
     var body: some View {
         ZStack {
@@ -334,6 +364,13 @@ struct NodeView: View {
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .opacity(0.7)
+
+                if let summary = parentLayerSummary {
+                    Text("View: \(summary)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .opacity(0.7)
+                }
             }
             .padding()
         }
@@ -384,6 +421,18 @@ struct NodeView: View {
             case .optionPicker: return .orange
             }
         case .layerInput: return .gray
+        }
+    }
+
+    private var parentLayerSummary: String? {
+        guard case .layerInput = node else { return nil }
+
+        if let parentLayer {
+            let name = parentLayer.layer.rawValue.capitalized
+            let identifier = String(parentLayer.nodeId.uuidString.prefix(6))
+            return "\(name) · \(identifier)"
+        } else {
+            return "Unknown"
         }
     }
 }

@@ -1,0 +1,20 @@
+{
+  "agent-a1": [
+    "DAGFromCode/SwiftSyntaxVisitor.swift",
+    "DAGFromCode/SwiftUIVisitors.swift",
+    "DAGFromCode/Mapping.swift",
+    "DAGFromCode/ProjectDataParser.swift"
+  ],
+  "agent-a2": [
+    "DAGFromCode/DAGDebugView.swift",
+    "DAGFromCode/DAGDebugViewWithGraph.swift",
+    "DAGFromCode/DAGGraphView.swift",
+    "DAGFromCodeTests/**",
+    "prompts/swiftui-view-support/**"
+  ],
+  "shared_read_only": [
+    "thoughts/work-items/swiftui-view-support/plan/for-2-agents/2025-10-27-ENG-plan-for-2-agents.md",
+    "prompts/swiftui-view-support/launch.json"
+  ],
+  "integration_notes": "Shared documentation updates must be coordinated via prompts/swiftui-view-support/integration-notes.md before editing."
+}

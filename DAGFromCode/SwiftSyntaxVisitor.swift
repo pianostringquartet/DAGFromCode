@@ -7,24 +7,29 @@
 
 import Foundation
 import SwiftSyntax
+import SwiftOperators
 
 class ProjectDataBuilderVisitor: SyntaxVisitor {
     private var nodes: [UUID: DAGNodeType] = [:]
     private var views: [PrototypeLayer] = []
+    private var viewIndicesById: [UUID: Int] = [:]
+    private var processedViewCallIds: Set<SyntaxIdentifier> = []
     private var rootNodeId: UUID?
     private var nodeStack: [UUID] = []
     private var depth: Int = 0
     private var variableValues: [String: Double] = [:]
     private var variableNodes: [String: UUID] = [:]  // Maps variable names to their ValueNode UUIDs
+    private var variableExpressions: [String: ExprSyntax] = [:]
 
     // MARK: - Public Interface
 
     func buildProjectData() -> ProjectData {
-        guard let rootId = rootNodeId else {
-            return ProjectData.empty()
+        if let rootId = rootNodeId ?? nodes.keys.first {
+            let dag = DAG(nodes: nodes, resultNodeId: rootId)
+            return ProjectData(graph: dag, views: views)
+        } else {
+            return ProjectData(graph: DAG.empty(), views: views)
         }
-        let dag = DAG(nodes: nodes, resultNodeId: rootId)
-        return ProjectData(graph: dag, views: views)
     }
 
     func getRootNode() -> DAGNodeType? {
@@ -42,8 +47,18 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
 
     internal func addView(_ view: PrototypeLayer) {
         views.append(view)
+        viewIndicesById[view.nodeId] = views.count - 1
         print("\(indent())✅ Added view to project: \(view.layer.rawValue) (\(String(view.nodeId.uuidString.prefix(8))))")
         print("\(indent())📊 Total views in project: \(views.count)")
+    }
+
+    internal func updateView(_ view: PrototypeLayer) {
+        guard let index = viewIndicesById[view.nodeId] else {
+            print("\(indent())⚠️ Attempted to update unknown view: \(String(view.nodeId.uuidString.prefix(8)))")
+            return
+        }
+        views[index] = view
+        print("\(indent())🔁 Updated view at index \(index): \(view.layer.rawValue)")
     }
 
     // MARK: - Stack Management
@@ -92,14 +107,42 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
 
     // MARK: - Variable Management
 
-    internal func storeVariable(_ name: String, value: Double) {
-        variableValues[name] = value
+    internal func storeVariable(
+        _ name: String,
+        value: Double?,
+        nodeId: UUID?,
+        expression: ExprSyntax?
+    ) {
+        if let value = value {
+            variableValues[name] = value
+        } else {
+            variableValues.removeValue(forKey: name)
+        }
 
-        // Create a ValueNode for this variable and register it
-        let nodeId = createValueNode(value)
-        variableNodes[name] = nodeId
+        if let nodeId = nodeId {
+            variableNodes[name] = nodeId
+        } else {
+            variableNodes.removeValue(forKey: name)
+        }
 
-        print("\(indent())💾 Stored variable '\(name)' = \(value), created ValueNode: \(String(nodeId.uuidString.prefix(8)))")
+        if let expression {
+            variableExpressions[name] = expression
+        } else {
+            variableExpressions.removeValue(forKey: name)
+        }
+
+        if let value = value {
+            print("\(indent())💾 Stored variable '\(name)' = \(value)")
+        } else {
+            print("\(indent())💾 Stored variable '\(name)' with unknown numeric value")
+        }
+
+        if let nodeId = nodeId {
+            print("\(indent())🧬 Linked variable '\(name)' to node: \(String(nodeId.uuidString.prefix(8)))")
+        } else {
+            print("\(indent())⚠️ Variable '\(name)' has no associated node")
+        }
+
         logVariableTable()
     }
 
@@ -159,13 +202,327 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
     }
 
     internal func createLayerInputNode(layerInput: PrototypeLayerInputKind, input: NodeInput) -> UUID {
-        let layerInputNode = DAGNodeBuilder.createLayerInputNode(
-            layerInput: layerInput,
-            input: input
+        let nodeId = UUID()
+        let normalizedInput = NodeInput(
+            id: InputCoordinate(nodeId: nodeId, portId: input.id.portId),
+            input: input.input
         )
-        addNode(layerInputNode)
-        print("\(indent())🎭 Created \(layerInput.displayName) layer input node with ID: \(String(layerInputNode.id.uuidString.prefix(8)))")
-        return layerInputNode.id
+        let layerInputNode = DAGLayerInputNode(
+            nodeId: nodeId,
+            layerInput: layerInput,
+            input: normalizedInput
+        )
+        addNode(.layerInput(layerInputNode))
+        print("\(indent())🎭 Created \(layerInput.displayName) layer input node with ID: \(String(nodeId.uuidString.prefix(8)))")
+        return nodeId
+    }
+
+    private func normalizeExpression(_ expression: ExprSyntax) -> ExprSyntax {
+        do {
+            let folded = try OperatorTable.standardOperators.foldAll(expression)
+            if let expr = folded.as(ExprSyntax.self) {
+                return expr
+            }
+        } catch {
+            print("\(indent())⚠️ Failed to normalize expression: \(error)")
+        }
+        return expression
+    }
+
+    // MARK: - SwiftUI View Processing
+
+    private struct SwiftUIViewModifierCall {
+        let kind: PrototypeLayerInputKind
+        let call: FunctionCallExprSyntax
+        let memberAccess: MemberAccessExprSyntax
+    }
+
+    private struct SwiftUIViewChain {
+        let rootKind: PrototypeLayerKind
+        let rootCall: FunctionCallExprSyntax
+        let modifiers: [SwiftUIViewModifierCall]
+        let calls: [FunctionCallExprSyntax]
+    }
+
+    private func isTopLevelSwiftUIViewCall(_ node: FunctionCallExprSyntax) -> Bool {
+        if let memberAccess = node.parent?.as(MemberAccessExprSyntax.self),
+           memberAccess.parent?.is(FunctionCallExprSyntax.self) == true {
+            return false
+        }
+        return true
+    }
+
+    private func parseSwiftUIViewChain(from node: FunctionCallExprSyntax) -> SwiftUIViewChain? {
+        var modifiers: [SwiftUIViewModifierCall] = []
+        var visitedCalls: [FunctionCallExprSyntax] = [node]
+        var currentCall: FunctionCallExprSyntax? = node
+
+        while let call = currentCall {
+            if let viewKind = detectSwiftUIView(call) {
+                if !visitedCalls.contains(where: { $0.id == call.id }) {
+                    visitedCalls.append(call)
+                }
+                let orderedModifiers = Array(modifiers.reversed())
+                return SwiftUIViewChain(
+                    rootKind: viewKind,
+                    rootCall: call,
+                    modifiers: orderedModifiers,
+                    calls: visitedCalls
+                )
+            }
+
+            guard let memberAccess = call.calledExpression.as(MemberAccessExprSyntax.self),
+                  let modifierKind = detectViewModifier(memberAccess),
+                  let baseExpression = memberAccess.base?.as(FunctionCallExprSyntax.self) else {
+                return nil
+            }
+
+            modifiers.append(
+                SwiftUIViewModifierCall(
+                    kind: modifierKind,
+                    call: call,
+                    memberAccess: memberAccess
+                )
+            )
+            if !visitedCalls.contains(where: { $0.id == baseExpression.id }) {
+                visitedCalls.append(baseExpression)
+            }
+            currentCall = baseExpression
+        }
+
+        return nil
+    }
+
+    private func processSwiftUIViewChain(_ chain: SwiftUIViewChain) {
+        let layerId = UUID()
+        var activeLayer = createPrototypeLayer(
+            nodeId: layerId,
+            layerKind: chain.rootKind
+        )
+        addView(activeLayer)
+
+        for modifier in chain.modifiers {
+            let artifacts = makeModifierArtifacts(for: modifier)
+            activeLayer = layer(activeLayer, appending: artifacts.modifier)
+            updateView(activeLayer)
+
+            if let inputValue = artifacts.inputValue {
+                let nodeInput = NodeInput(
+                    id: InputCoordinate(nodeId: layerId, portId: 0),
+                    input: inputValue
+                )
+                let layerInputNodeId = createLayerInputNode(
+                    layerInput: modifier.kind,
+                    input: nodeInput
+                )
+                setAsRoot(layerInputNodeId)
+            }
+        }
+
+        for call in chain.calls {
+            processedViewCallIds.insert(call.id)
+        }
+    }
+
+    private func makeModifierArtifacts(
+        for modifier: SwiftUIViewModifierCall
+    ) -> (modifier: PrototypeLayerModifier, inputValue: InputValue?) {
+        let metadata = modifierArgumentMetadata(from: modifier.call.arguments)
+        var numericPayloads = metadata.numericPayloads
+
+        if numericPayloads.isEmpty,
+           let computedValue = computeNumericPayload(for: modifier.call.arguments) {
+            numericPayloads = [computedValue]
+        }
+
+        let protoModifier = createPrototypeLayerModifier(
+            kind: modifier.kind,
+            argumentDescription: metadata.argumentDescription,
+            numericPayloads: numericPayloads
+        )
+        let inputValue = resolveModifierInputValue(
+            kind: modifier.kind,
+            arguments: modifier.call.arguments,
+            numericPayloads: numericPayloads
+        )
+        return (protoModifier, inputValue)
+    }
+
+    private func resolveModifierInputValue(
+        kind: PrototypeLayerInputKind,
+        arguments: LabeledExprListSyntax,
+        numericPayloads: [Double]
+    ) -> InputValue? {
+        guard let firstArgument = arguments.first else {
+            return kind == .fill ? .value(0.0) : nil
+        }
+
+        if let incomingEdge = resolveIncomingEdge(from: firstArgument.expression) {
+            return incomingEdge
+        }
+
+        if let numeric = numericPayloads.first {
+            return .value(numeric)
+        }
+
+        return kind == .fill ? .value(0.0) : nil
+    }
+
+    private func computeNumericPayload(for arguments: LabeledExprListSyntax) -> Double? {
+        guard let expression = arguments.first?.expression else {
+            return nil
+        }
+        return evaluateNumericExpression(expression)
+    }
+
+    private func resolveIncomingEdge(from expression: ExprSyntax) -> InputValue? {
+        guard let nodeId = buildNodeId(from: expression) else {
+            if let declRef = expression.as(DeclReferenceExprSyntax.self) {
+                let variableName = declRef.baseName.text
+                if let initializerExpression = variableExpressions[variableName] {
+                    print("\(indent())♻️ Attempting rebuild for variable '\(variableName)' using stored initializer")
+                    if let rebuiltNodeId = buildNodeId(from: initializerExpression, allowRootMutation: true) {
+                        let value = lookupVariable(variableName)
+                        storeVariable(
+                            variableName,
+                            value: value,
+                            nodeId: rebuiltNodeId,
+                            expression: initializerExpression
+                        )
+                        let output = OutputCoordinate(nodeId: rebuiltNodeId, portId: 0)
+                        return .incomingEdge(from: output)
+                    }
+                }
+            }
+            return nil
+        }
+
+        let output = OutputCoordinate(nodeId: nodeId, portId: 0)
+        return .incomingEdge(from: output)
+    }
+
+    @discardableResult
+    private func buildNodeId(
+        from expression: ExprSyntax,
+        allowRootMutation: Bool = false
+    ) -> UUID? {
+        let originalStackCount = currentNodeStack.count
+        let previousRoot = rootNodeId
+        print("\(indent())🧱 Building node ID from expression: \(expression)")
+
+        walk(expression)
+
+        guard currentNodeStack.count > originalStackCount,
+              let newNodeId = currentNodeStack.last else {
+            print("\(indent())❌ Failed to build node ID for expression: \(expression)")
+            if !allowRootMutation {
+                rootNodeId = previousRoot
+            }
+            return nil
+        }
+
+        let nodesToPop = currentNodeStack.count - originalStackCount
+        for _ in 0..<nodesToPop {
+            _ = popFromStack()
+        }
+
+        if !allowRootMutation {
+            rootNodeId = previousRoot
+        }
+
+        print("\(indent())✅ Built node ID \(String(newNodeId.uuidString.prefix(8))) for expression: \(expression)")
+        return newNodeId
+    }
+
+    internal func evaluateNumericExpression(_ expression: ExprSyntax) -> Double? {
+        if let floatLiteral = expression.as(FloatLiteralExprSyntax.self),
+           let value = Double(floatLiteral.literal.text) {
+            return value
+        }
+
+        if let integerLiteral = expression.as(IntegerLiteralExprSyntax.self),
+           let value = Double(integerLiteral.literal.text) {
+            return value
+        }
+
+        if let declRef = expression.as(DeclReferenceExprSyntax.self) {
+            return lookupVariable(declRef.baseName.text)
+        }
+
+        if let tupleExpr = expression.as(TupleExprSyntax.self),
+           tupleExpr.elements.count == 1,
+           let first = tupleExpr.elements.first {
+            return evaluateNumericExpression(first.expression)
+        }
+
+        if let prefix = expression.as(PrefixOperatorExprSyntax.self),
+           prefix.operator.text == "-",
+           let value = evaluateNumericExpression(prefix.expression) {
+            return -value
+        }
+
+        if let infixExpr = expression.as(InfixOperatorExprSyntax.self),
+           let binaryOperator = infixExpr.operator.as(BinaryOperatorExprSyntax.self) {
+            guard let leftValue = evaluateNumericExpression(infixExpr.leftOperand),
+                  let rightValue = evaluateNumericExpression(infixExpr.rightOperand) else {
+                return nil
+            }
+
+            switch binaryOperator.operator.text {
+            case "+":
+                return leftValue + rightValue
+            case "-":
+                return leftValue - rightValue
+            case "*":
+                return leftValue * rightValue
+            case "/":
+                guard rightValue != 0 else { return nil }
+                return leftValue / rightValue
+            default:
+                return nil
+            }
+        }
+
+        if let sequenceExpr = expression.as(SequenceExprSyntax.self) {
+            return evaluateNumericSequence(sequenceExpr)
+        }
+
+        return nil
+    }
+
+    private func evaluateNumericSequence(_ sequence: SequenceExprSyntax) -> Double? {
+        guard let firstOperand = sequence.elements.first,
+              let initialValue = evaluateNumericExpression(firstOperand) else {
+            return nil
+        }
+
+        var result = initialValue
+        var iterator = sequence.elements.makeIterator()
+        _ = iterator.next() // consume first operand
+
+        while let operatorExpr = iterator.next() {
+            guard let binaryOperator = operatorExpr.as(BinaryOperatorExprSyntax.self),
+                  let rhsExpr = iterator.next(),
+                  let rhsValue = evaluateNumericExpression(rhsExpr) else {
+                return nil
+            }
+
+            switch binaryOperator.operator.text {
+            case "+":
+                result += rhsValue
+            case "-":
+                result -= rhsValue
+            case "*":
+                result *= rhsValue
+            case "/":
+                guard rhsValue != 0 else { return nil }
+                result /= rhsValue
+            default:
+                return nil
+            }
+        }
+
+        return result
     }
 
     // MARK: - Helper Methods for Parsing
@@ -266,26 +623,34 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
                 if let initializer = binding.initializer {
                     print("\(indent())🔍 Found initializer: \(initializer)")
 
-                    // Extract value from initializer
-                    if let literalExpr = initializer.value.as(IntegerLiteralExprSyntax.self) {
-                        if let value = Double(literalExpr.literal.text) {
-                            print("\(indent())💎 Integer literal value: \(value)")
-                            storeVariable(variableName, value: value)
-                        } else {
-                            print("\(indent())❌ Failed to parse integer literal: '\(literalExpr.literal.text)'")
-                        }
-                    } else if let literalExpr = initializer.value.as(FloatLiteralExprSyntax.self) {
-                        if let value = Double(literalExpr.literal.text) {
-                            print("\(indent())💎 Float literal value: \(value)")
-                            storeVariable(variableName, value: value)
-                        } else {
-                            print("\(indent())❌ Failed to parse float literal: '\(literalExpr.literal.text)'")
-                        }
+                    let rawExpression = initializer.value
+                    let expression = normalizeExpression(rawExpression)
+                    let numericValue = evaluateNumericExpression(expression)
+                    let nodeId = buildNodeId(from: expression, allowRootMutation: true)
+
+                    if let nodeId = nodeId {
+                        storeVariable(
+                            variableName,
+                            value: numericValue,
+                            nodeId: nodeId,
+                            expression: expression
+                        )
+                    } else if let numericValue = numericValue {
+                        print("\(indent())⚠️ Expression produced numeric value but no node; creating value node manually")
+                        let createdNodeId = createValueNode(numericValue)
+                        storeVariable(
+                            variableName,
+                            value: numericValue,
+                            nodeId: createdNodeId,
+                            expression: expression
+                        )
                     } else {
-                        print("\(indent())⚠️ Unsupported initializer type: \(type(of: initializer.value))")
+                        print("\(indent())⚠️ Unsupported initializer type: \(type(of: expression))")
+                        storeVariable(variableName, value: nil, nodeId: nil, expression: expression)
                     }
                 } else {
                     print("\(indent())⚠️ Variable '\(variableName)' has no initializer")
+                    storeVariable(variableName, value: nil, nodeId: nil, expression: nil)
                 }
             } else {
                 print("\(indent())⚠️ Unsupported pattern type: \(type(of: binding.pattern))")
@@ -311,14 +676,27 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
 
             if let value = lookupVariable(referenceName) {
                 // Look up the existing ValueNode for this variable instead of creating a new one
-                let nodeId: UUID
+                var nodeId: UUID
                 if let existingNodeId = variableNodes[referenceName] {
                     print("\(indent())🎯 Reusing existing ValueNode for variable '\(referenceName)': \(String(existingNodeId.uuidString.prefix(8)))")
                     nodeId = existingNodeId
                 } else {
-                    print("\(indent())⚠️ Variable '\(referenceName)' not found in node registry, creating new ValueNode")
-                    nodeId = createValueNode(value)
-                    variableNodes[referenceName] = nodeId
+                    if let expression = variableExpressions[referenceName],
+                       let rebuiltNodeId = buildNodeId(from: expression, allowRootMutation: true) {
+                        print("\(indent())♻️ Rebuilt DAG node for variable '\(referenceName)': \(String(rebuiltNodeId.uuidString.prefix(8)))")
+                        storeVariable(referenceName, value: value, nodeId: rebuiltNodeId, expression: expression)
+                        nodeId = rebuiltNodeId
+                    } else {
+                        print("\(indent())⚠️ Variable '\(referenceName)' not found in node registry, creating new ValueNode")
+                        let createdNodeId = createValueNode(value)
+                        storeVariable(
+                            referenceName,
+                            value: value,
+                            nodeId: createdNodeId,
+                            expression: variableExpressions[referenceName]
+                        )
+                        nodeId = createdNodeId
+                    }
                 }
 
                 if currentNodeStack.isEmpty {
@@ -544,10 +922,22 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
         print("\(indent())📝 Raw node: \(node)")
         print("\(indent())📊 Arguments count: \(node.arguments.count)")
         increaseDepth()
+        defer { decreaseDepth() }
+
+        if processedViewCallIds.contains(node.id) {
+            print("\(indent())ℹ️ Function call already processed as part of SwiftUI chain")
+            return .skipChildren
+        }
+
+        if let chain = parseSwiftUIViewChain(from: node),
+           isTopLevelSwiftUIViewCall(node) {
+            print("\(indent())🎨 Detected SwiftUI view chain with root '\(chain.rootKind.rawValue)' and \(chain.modifiers.count) modifier(s)")
+            processSwiftUIViewChain(chain)
+            return .skipChildren
+        }
 
         guard let declRef = node.calledExpression.as(DeclReferenceExprSyntax.self) else {
             print("\(indent())⚠️ Failed to cast calledExpression to DeclReferenceExprSyntax")
-            decreaseDepth()
             return .visitChildren
         }
 
@@ -556,7 +946,6 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
 
         guard let patchKind = patchKind(from: functionName) else {
             print("\(indent())⚠️ Unknown function: '\(functionName)'")
-            decreaseDepth()
             return .visitChildren
         }
 
@@ -569,36 +958,30 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
         let stackAfter = currentNodeStack.map { String($0.uuidString.prefix(8)) }
         print("\(indent())📚 Stack AFTER walking args: \(stackAfter)")
 
-        let inputCoord = InputCoordinate(nodeId: UUID(), portId: 0)
-
-        let inputValue: InputValue
-        if let childNodeId = currentNodeStack.last {
-            let upstreamOutput = OutputCoordinate(nodeId: childNodeId, portId: 0)
-            inputValue = .incomingEdge(from: upstreamOutput)
-            print("\(indent())🔗 Creating edge from upstream node: \(String(childNodeId.uuidString.prefix(8)))")
-
-            // Replace child with our function node on the stack
-            let functionNodeId = createFunctionNode(
-                patch: patchKind,
-                inputs: [NodeInput(id: inputCoord, input: inputValue)],
-                outputValue: 0.0
-            )
-
-            replaceTopOfStack(with: functionNodeId)
-
-            print("\(indent())🔄 Replaced child \(String(childNodeId.uuidString.prefix(8))) with function node \(String(functionNodeId.uuidString.prefix(8)))")
-
-            // Check if this should be the root node (stack should have exactly 1 item - our function node)
-            setAsRootIfAppropriate(functionNodeId)
-
-            print("\(indent())✅ Created DAGNode: \(patchKind) with ID: \(String(functionNodeId.uuidString.prefix(8)))")
-        } else {
+        guard let childNodeId = currentNodeStack.last else {
             print("\(indent())❌ No child node found in stack! Stack is empty or has no elements.")
-            decreaseDepth()
             return .skipChildren
         }
 
-        decreaseDepth()
+        let nodeId = UUID()
+        let inputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
+        let upstreamOutput = OutputCoordinate(nodeId: childNodeId, portId: 0)
+        let inputValue = NodeInput(id: inputCoord, input: .incomingEdge(from: upstreamOutput))
+
+        let functionNodeId = createFunctionNode(
+            patch: patchKind,
+            inputs: [inputValue],
+            outputValue: 0.0
+        )
+
+        replaceTopOfStack(with: functionNodeId)
+
+        print("\(indent())🔄 Replaced child \(String(childNodeId.uuidString.prefix(8))) with function node \(String(functionNodeId.uuidString.prefix(8)))")
+
+        setAsRootIfAppropriate(functionNodeId)
+
+        print("\(indent())✅ Created DAGNode: \(patchKind) with ID: \(String(functionNodeId.uuidString.prefix(8)))")
+
         return .skipChildren
     }
 

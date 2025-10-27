@@ -14,6 +14,7 @@ Use four-space indentation and Swift's standard casing (`UpperCamelCase` types, 
 
 ## Testing guidelines
 Add XCTest cases to `DAGFromCodeTests/` with descriptive `test`-prefixed method names (e.g., `testGraphBuildsFromSampleProject`). Keep fixtures light; stash reusable SwiftSyntax snippets under `DAGFromCodeTests/Fixtures/` when you add them. Run `xcodebuild test` before every pull request and note simulator model, iOS version, and outcomes in the change description.
+- When simulator runs stall with Mach `-308` errors, reset before re-running: `xcrun simctl shutdown all` and then `xcodebuild test -scheme DAGFromCode -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M4),OS=18.6'`. If shutdown doesn’t help, boot the target simulator once in the Simulator app to complete asset installs, then rerun the command.
 
 ## Commit & pull request guidelines
 Write commits in imperative present tense (e.g., “Add DAG debugger toggles”) and scope each commit to a single concern: a view, helper, or prompt update. Pull requests should outline behavior changes, list touched files with absolute paths such as `prompts/plan.md`, and mention any follow-up issues. Include screenshots or screen recordings for UI shifts and note the commands or simulators you used for verification.
