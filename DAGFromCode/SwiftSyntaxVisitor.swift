@@ -17,7 +17,7 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
     private var rootNodeId: UUID?
     private var nodeStack: [UUID] = []
     private var depth: Int = 0
-    private var variableValues: [String: Double] = [:]
+    private var variableValues: [String: DAGValue] = [:]
     private var variableNodes: [String: UUID] = [:]  // Maps variable names to their ValueNode UUIDs
     private var variableExpressions: [String: ExprSyntax] = [:]
 
@@ -109,7 +109,7 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
 
     internal func storeVariable(
         _ name: String,
-        value: Double?,
+        value: DAGValue?,
         nodeId: UUID?,
         expression: ExprSyntax?
     ) {
@@ -132,9 +132,9 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
         }
 
         if let value = value {
-            print("\(indent())💾 Stored variable '\(name)' = \(value)")
+            print("\(indent())💾 Stored variable '\(name)' = \(describe(value))")
         } else {
-            print("\(indent())💾 Stored variable '\(name)' with unknown numeric value")
+            print("\(indent())💾 Stored variable '\(name)' with unknown literal value")
         }
 
         if let nodeId = nodeId {
@@ -146,10 +146,10 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
         logVariableTable()
     }
 
-    internal func lookupVariable(_ name: String) -> Double? {
+    internal func lookupVariable(_ name: String) -> DAGValue? {
         let value = variableValues[name]
         if let value = value {
-            print("\(indent())✅ Found variable '\(name)' = \(value)")
+            print("\(indent())✅ Found variable '\(name)' = \(describe(value))")
         } else {
             print("\(indent())❌ Variable '\(name)' not found in table")
             logVariableTable()
@@ -177,24 +177,173 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
     }
 
     private func logVariableTable() {
-        let entries = variableValues.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
+        let entries = variableValues.map { "\($0.key)=\(describe($0.value))" }.joined(separator: ", ")
         print("\(indent())📚 Variable table now contains: [\(entries)]")
+    }
+
+    private func describe(_ value: DAGValue) -> String {
+        switch value {
+        case .number(let number):
+            return number.cleanNumericString
+        case .boolean(let bool):
+            return bool ? "true" : "false"
+        case .color(let color):
+            let nameComponent = color.name.map { "\($0) " } ?? ""
+            return "\(nameComponent)rgba(\(color.red.cleanNumericString),\(color.green.cleanNumericString),\(color.blue.cleanNumericString),\(color.alpha.cleanNumericString))"
+        }
+    }
+
+    private func outputValue(for nodeId: UUID) -> DAGValue? {
+        guard let node = nodes[nodeId] else {
+            return nil
+        }
+
+        switch node {
+        case .function(let functionNode):
+            return functionNode.output.value
+        case .layerInput:
+            return nil
+        }
+    }
+
+    private func resolveValue(for input: NodeInput) -> DAGValue? {
+        switch input.input {
+        case .value(let value):
+            return value
+        case .incomingEdge(let from):
+            guard let upstreamNode = nodes[from.nodeId] else {
+                return nil
+            }
+
+            switch upstreamNode {
+            case .function(let functionNode):
+                return functionNode.output.value
+            case .layerInput(let layerInputNode):
+                return resolveValue(for: layerInputNode.input)
+            }
+        }
+    }
+
+    private func resolveFunctionOutput(
+        patch: DAGFunction,
+        inputs: [NodeInput]
+    ) -> DAGValue? {
+        switch patch {
+        case .add:
+            guard inputs.count >= 2,
+                  let lhs = resolveValue(for: inputs[0])?.asNumber,
+                  let rhs = resolveValue(for: inputs[1])?.asNumber else {
+                return nil
+            }
+            return .number(lhs + rhs)
+        case .subtract:
+            guard inputs.count >= 2,
+                  let lhs = resolveValue(for: inputs[0])?.asNumber,
+                  let rhs = resolveValue(for: inputs[1])?.asNumber else {
+                return nil
+            }
+            return .number(lhs - rhs)
+        case .sin:
+            guard let value = inputs.first.flatMap({ resolveValue(for: $0)?.asNumber }) else {
+                return nil
+            }
+            return .number(sin(value))
+        case .cos:
+            guard let value = inputs.first.flatMap({ resolveValue(for: $0)?.asNumber }) else {
+                return nil
+            }
+            return .number(cos(value))
+        case .sqrt:
+            guard let value = inputs.first.flatMap({ resolveValue(for: $0)?.asNumber }) else {
+                return nil
+            }
+            return .number(sqrt(value))
+        case .greaterThan:
+            guard inputs.count >= 2,
+                  let lhs = resolveValue(for: inputs[0])?.asNumber,
+                  let rhs = resolveValue(for: inputs[1])?.asNumber else {
+                return nil
+            }
+            return .boolean(lhs > rhs)
+        case .lessThan:
+            guard inputs.count >= 2,
+                  let lhs = resolveValue(for: inputs[0])?.asNumber,
+                  let rhs = resolveValue(for: inputs[1])?.asNumber else {
+                return nil
+            }
+            return .boolean(lhs < rhs)
+        case .equal:
+            guard inputs.count >= 2,
+                  let lhs = resolveValue(for: inputs[0]),
+                  let rhs = resolveValue(for: inputs[1]) else {
+                return nil
+            }
+            return .boolean(lhs == rhs)
+        case .optionPicker:
+            guard inputs.count >= 3,
+                  let condition = resolveValue(for: inputs[0])?.asBoolean,
+                  let falseValue = resolveValue(for: inputs[1]),
+                  let trueValue = resolveValue(for: inputs[2]) else {
+                return nil
+            }
+            return condition ? trueValue : falseValue
+        case .rounded:
+            guard let value = inputs.first.flatMap({ resolveValue(for: $0)?.asNumber }) else {
+                return nil
+            }
+            return .number(value.rounded())
+        case .magnitude:
+            guard let value = inputs.first.flatMap({ resolveValue(for: $0)?.asNumber }) else {
+                return nil
+            }
+            return .number(abs(value))
+        case .value:
+            return inputs.first.flatMap(resolveValue(for:))
+        }
+    }
+
+    private func ensureNumericOperands(_ nodeIds: [UUID], context: String) -> Bool {
+        for nodeId in nodeIds {
+            guard let value = outputValue(for: nodeId) else {
+                continue
+            }
+
+            if case .number = value {
+                continue
+            }
+
+            print("\(indent())❌ Non-numeric operand encountered while building \(context); got \(describe(value))")
+            return false
+        }
+
+        return true
     }
 
     // MARK: - Utility Methods for Creating Nodes
 
-    internal func createValueNode(_ value: Double) -> UUID {
+    internal func createValueNode(_ value: DAGValue) -> UUID {
         let valueNode = DAGNodeBuilder.createValueNode(value: value)
         addNode(valueNode)
-        print("\(indent())💎 Created ValueNode with value: \(value), ID: \(String(valueNode.id.uuidString.prefix(8)))")
+        print("\(indent())💎 Created ValueNode with value: \(describe(value)), ID: \(String(valueNode.id.uuidString.prefix(8)))")
         return valueNode.id
     }
 
-    internal func createFunctionNode(patch: DAGFunction, inputs: [NodeInput], outputValue: Double = 0.0) -> UUID {
+    internal func createValueNode(_ value: Double) -> UUID {
+        createValueNode(.number(value))
+    }
+
+    internal func createFunctionNode(
+        patch: DAGFunction,
+        inputs: [NodeInput],
+        outputValue: DAGValue = .number(0.0),
+        nodeId: UUID = UUID()
+    ) -> UUID {
+        let resolvedOutput = resolveFunctionOutput(patch: patch, inputs: inputs) ?? outputValue
         let functionNode = DAGNodeBuilder.createFunctionNode(
+            nodeId: nodeId,
             patch: patch,
             inputs: inputs,
-            outputValue: outputValue
+            outputValue: resolvedOutput
         )
         addNode(functionNode)
         print("\(indent())🔧 Created \(patch.displayName) node with ID: \(String(functionNode.id.uuidString.prefix(8)))")
@@ -329,6 +478,7 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
     ) -> (modifier: PrototypeLayerModifier, inputValue: InputValue?) {
         let metadata = modifierArgumentMetadata(from: modifier.call.arguments)
         var numericPayloads = metadata.numericPayloads
+        let literalPayload = modifier.call.arguments.first.flatMap { evaluateLiteralValue($0.expression) }
 
         if numericPayloads.isEmpty,
            let computedValue = computeNumericPayload(for: modifier.call.arguments) {
@@ -338,12 +488,14 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
         let protoModifier = createPrototypeLayerModifier(
             kind: modifier.kind,
             argumentDescription: metadata.argumentDescription,
-            numericPayloads: numericPayloads
+            numericPayloads: numericPayloads,
+            typedPayload: literalPayload
         )
         let inputValue = resolveModifierInputValue(
             kind: modifier.kind,
             arguments: modifier.call.arguments,
-            numericPayloads: numericPayloads
+            numericPayloads: numericPayloads,
+            literalPayload: literalPayload
         )
         return (protoModifier, inputValue)
     }
@@ -351,28 +503,151 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
     private func resolveModifierInputValue(
         kind: PrototypeLayerInputKind,
         arguments: LabeledExprListSyntax,
-        numericPayloads: [Double]
+        numericPayloads: [Double],
+        literalPayload: DAGValue?
     ) -> InputValue? {
         guard let firstArgument = arguments.first else {
-            return kind == .fill ? .value(0.0) : nil
+            if kind == .fill {
+                print("\(indent())⚠️ .fill modifier missing argument; defaulting to clear color payload")
+                return .value(.color(ColorValue(name: "clear", red: 0, green: 0, blue: 0, alpha: 0)))
+            }
+            return nil
         }
 
         if let incomingEdge = resolveIncomingEdge(from: firstArgument.expression) {
             return incomingEdge
         }
 
-        if let numeric = numericPayloads.first {
-            return .value(numeric)
+        if let literalPayload {
+            switch kind {
+            case .fill:
+                if case .color = literalPayload {
+                    return .value(literalPayload)
+                }
+            case .opacity, .scaleEffect:
+                if let numeric = literalPayload.asNumber {
+                    return .value(.number(numeric))
+                }
+            }
         }
 
-        return kind == .fill ? .value(0.0) : nil
+        if let numeric = numericPayloads.first {
+            return .value(.number(numeric))
+        }
+
+        if kind == .fill {
+            print("\(indent())⚠️ .fill modifier argument unresolved; defaulting to clear color payload")
+            return .value(.color(ColorValue(name: "clear", red: 0, green: 0, blue: 0, alpha: 0)))
+        }
+
+        return nil
     }
 
     private func computeNumericPayload(for arguments: LabeledExprListSyntax) -> Double? {
         guard let expression = arguments.first?.expression else {
             return nil
         }
+        if let literal = evaluateLiteralValue(expression),
+           let numeric = literal.asNumber {
+            return numeric
+        }
+
         return evaluateNumericExpression(expression)
+    }
+
+    private func evaluateLiteralValue(_ expression: ExprSyntax) -> DAGValue? {
+        if let color = evaluateColorExpression(expression) {
+            return .color(color)
+        }
+
+        if let booleanLiteral = expression.as(BooleanLiteralExprSyntax.self) {
+            return .boolean(booleanLiteral.literal.text == "true")
+        }
+
+        if let number = evaluateNumericExpression(expression) {
+            return .number(number)
+        }
+
+        return nil
+    }
+
+    private func evaluateColorExpression(_ expression: ExprSyntax) -> ColorValue? {
+        if let memberAccess = expression.as(MemberAccessExprSyntax.self),
+           let declRef = memberAccess.base?.as(DeclReferenceExprSyntax.self),
+           declRef.baseName.text == "Color" {
+            let colorName = memberAccess.declName.baseName.text
+            if let namedColor = namedColorValue(colorName) {
+                return namedColor
+            }
+        }
+
+        if let functionCall = expression.as(FunctionCallExprSyntax.self),
+           let calledExpression = functionCall.calledExpression.as(DeclReferenceExprSyntax.self),
+           calledExpression.baseName.text == "Color" {
+            if let initializerColor = colorValue(from: functionCall.arguments) {
+                return initializerColor
+            }
+        }
+
+        return nil
+    }
+
+    private func colorValue(from arguments: LabeledExprListSyntax) -> ColorValue? {
+        var redComponent: Double?
+        var greenComponent: Double?
+        var blueComponent: Double?
+        var alphaComponent: Double = 1.0
+
+        for argument in arguments {
+            guard let label = argument.label?.text else {
+                continue
+            }
+
+            switch label {
+            case "red":
+                redComponent = evaluateNumericExpression(argument.expression)
+            case "green":
+                greenComponent = evaluateNumericExpression(argument.expression)
+            case "blue":
+                blueComponent = evaluateNumericExpression(argument.expression)
+            case "opacity", "alpha":
+                if let value = evaluateNumericExpression(argument.expression) {
+                    alphaComponent = value
+                }
+            default:
+                continue
+            }
+        }
+
+        guard let red = redComponent,
+              let green = greenComponent,
+              let blue = blueComponent else {
+            return nil
+        }
+
+        return ColorValue(name: nil, red: red, green: green, blue: blue, alpha: alphaComponent)
+    }
+
+    private func namedColorValue(_ name: String) -> ColorValue? {
+        switch name {
+        case "red":
+            return ColorValue(name: name, red: 1.0, green: 0.0, blue: 0.0)
+        case "green":
+            return ColorValue(name: name, red: 0.0, green: 1.0, blue: 0.0)
+        case "blue":
+            return ColorValue(name: name, red: 0.0, green: 0.0, blue: 1.0)
+        case "black":
+            return ColorValue(name: name, red: 0.0, green: 0.0, blue: 0.0)
+        case "white":
+            return ColorValue(name: name, red: 1.0, green: 1.0, blue: 1.0)
+        case "gray":
+            return ColorValue(name: name, red: 0.5, green: 0.5, blue: 0.5)
+        case "clear":
+            return ColorValue(name: name, red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
+        default:
+            print("\(indent())⚠️ Unhandled Color named literal: \(name)")
+            return nil
+        }
     }
 
     private func resolveIncomingEdge(from expression: ExprSyntax) -> InputValue? {
@@ -446,7 +721,7 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
         }
 
         if let declRef = expression.as(DeclReferenceExprSyntax.self) {
-            return lookupVariable(declRef.baseName.text)
+            return lookupVariable(declRef.baseName.text)?.asNumber
         }
 
         if let tupleExpr = expression.as(TupleExprSyntax.self),
@@ -625,22 +900,22 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
 
                     let rawExpression = initializer.value
                     let expression = normalizeExpression(rawExpression)
-                    let numericValue = evaluateNumericExpression(expression)
+                    let literalValue = evaluateLiteralValue(expression)
                     let nodeId = buildNodeId(from: expression, allowRootMutation: true)
 
                     if let nodeId = nodeId {
                         storeVariable(
                             variableName,
-                            value: numericValue,
+                            value: literalValue,
                             nodeId: nodeId,
                             expression: expression
                         )
-                    } else if let numericValue = numericValue {
-                        print("\(indent())⚠️ Expression produced numeric value but no node; creating value node manually")
-                        let createdNodeId = createValueNode(numericValue)
+                    } else if let literalValue {
+                        print("\(indent())⚠️ Expression produced literal value but no node; creating value node manually")
+                        let createdNodeId = createValueNode(literalValue)
                         storeVariable(
                             variableName,
-                            value: numericValue,
+                            value: literalValue,
                             nodeId: createdNodeId,
                             expression: expression
                         )
@@ -666,6 +941,11 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
     override func visit(_ node: DeclReferenceExprSyntax) -> SyntaxVisitorContinueKind {
         let referenceName = node.baseName.text
         print("\(indent())🔗 Visiting DeclReferenceExprSyntax: '\(referenceName)'")
+
+        if referenceName == "Color" {
+            print("\(indent())ℹ️ Treating 'Color' as type reference")
+            return .visitChildren
+        }
 
         // Check if this is a variable reference (not a function name)
         // We can distinguish by checking if it's being used as a function call's calledExpression
@@ -729,7 +1009,7 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
             return .skipChildren
         }
 
-        let nodeId = createValueNode(value)
+        let nodeId = createValueNode(.number(value))
 
         if currentNodeStack.isEmpty {
             // This is a standalone value (root of expression)
@@ -752,7 +1032,7 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
             return .skipChildren
         }
 
-        let nodeId = createValueNode(value)
+        let nodeId = createValueNode(.number(value))
 
         if currentNodeStack.isEmpty {
             // This is a standalone value (root of expression)
@@ -770,11 +1050,11 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
     override func visit(_ node: BooleanLiteralExprSyntax) -> SyntaxVisitorContinueKind {
         print("\(indent())🔘 Visiting BooleanLiteralExprSyntax: '\(node.literal.text)'")
 
-        // Convert boolean to double: true -> 1.0, false -> 0.0
-        let value: Double = node.literal.text == "true" ? 1.0 : 0.0
+        let value = node.literal.text == "true"
+        let dagValue = DAGValue.boolean(value)
         print("\(indent())💎 Boolean literal value: \(value)")
 
-        let nodeId = createValueNode(value)
+        let nodeId = createValueNode(dagValue)
 
         if currentNodeStack.isEmpty {
             // This is a standalone boolean (root of expression)
@@ -844,10 +1124,26 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
         let leftInput = NodeInput(id: leftInputCoord, input: .incomingEdge(from: leftUpstreamOutput))
         let rightInput = NodeInput(id: rightInputCoord, input: .incomingEdge(from: rightUpstreamOutput))
 
+        let operandContext = "operator '\(operatorText)'"
+        guard ensureNumericOperands([leftNodeId, rightNodeId], context: operandContext) else {
+            return .skipChildren
+        }
+
+        let defaultOutput: DAGValue
+        switch patchKind {
+        case .add, .subtract:
+            defaultOutput = .number(0.0)
+        case .greaterThan, .lessThan, .equal:
+            defaultOutput = .boolean(false)
+        default:
+            defaultOutput = .number(0.0)
+        }
+
         let functionNodeId = createFunctionNode(
             patch: patchKind,
             inputs: [leftInput, rightInput],
-            outputValue: 0.0
+            outputValue: defaultOutput,
+            nodeId: nodeId
         )
 
         // Add our node to stack
@@ -863,6 +1159,20 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
 
     override func visit(_ node: MemberAccessExprSyntax) -> SyntaxVisitorContinueKind {
         print("\(indent())🔗 Visiting MemberAccessExprSyntax: \(node)")
+
+        if let colorValue = evaluateColorExpression(ExprSyntax(node)) {
+            print("\(indent())🎨 Detected color literal via member access")
+            let nodeId = createValueNode(.color(colorValue))
+
+            if currentNodeStack.isEmpty {
+                currentNodeStack = [nodeId]
+                setAsRootIfAppropriate(nodeId)
+            } else {
+                pushToStack(nodeId)
+            }
+
+            return .skipChildren
+        }
 
         // Get method name using the correct non-deprecated API
         let memberName = node.declName.baseName.text
@@ -898,10 +1208,15 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
         let upstreamOutput = OutputCoordinate(nodeId: baseNodeId, portId: 0)
         let input = NodeInput(id: inputCoord, input: .incomingEdge(from: upstreamOutput))
 
+        guard ensureNumericOperands([baseNodeId], context: "method '\(memberName)' call") else {
+            return .skipChildren
+        }
+
         let methodNodeId = createFunctionNode(
             patch: patchKind,
             inputs: [input],
-            outputValue: 0.0
+            outputValue: .number(0.0),
+            nodeId: nodeId
         )
 
         // Replace base with our method node on the stack
@@ -933,6 +1248,20 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
            isTopLevelSwiftUIViewCall(node) {
             print("\(indent())🎨 Detected SwiftUI view chain with root '\(chain.rootKind.rawValue)' and \(chain.modifiers.count) modifier(s)")
             processSwiftUIViewChain(chain)
+            return .skipChildren
+        }
+
+        if let colorValue = evaluateColorExpression(ExprSyntax(node)) {
+            print("\(indent())🎨 Detected color literal via initializer")
+            let nodeId = createValueNode(.color(colorValue))
+
+            if currentNodeStack.isEmpty {
+                currentNodeStack = [nodeId]
+                setAsRootIfAppropriate(nodeId)
+            } else {
+                pushToStack(nodeId)
+            }
+
             return .skipChildren
         }
 
@@ -968,10 +1297,15 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
         let upstreamOutput = OutputCoordinate(nodeId: childNodeId, portId: 0)
         let inputValue = NodeInput(id: inputCoord, input: .incomingEdge(from: upstreamOutput))
 
+        guard ensureNumericOperands([childNodeId], context: "function '\(functionName)' call") else {
+            return .skipChildren
+        }
+
         let functionNodeId = createFunctionNode(
             patch: patchKind,
             inputs: [inputValue],
-            outputValue: 0.0
+            outputValue: .number(0.0),
+            nodeId: nodeId
         )
 
         replaceTopOfStack(with: functionNodeId)
@@ -1016,6 +1350,14 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
 
         print("\(indent())⚡ Processing ternary operation: \(String(conditionNodeId.uuidString.prefix(8))) ? \(String(trueValueNodeId.uuidString.prefix(8))) : \(String(falseValueNodeId.uuidString.prefix(8)))")
 
+        if let conditionValue = outputValue(for: conditionNodeId),
+           case .boolean = conditionValue {
+            // ok
+        } else {
+            print("\(indent())❌ Ternary condition does not resolve to a boolean value")
+            return .skipChildren
+        }
+
         // Create the OptionPicker node
         let nodeId = UUID()
         let conditionInputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
@@ -1037,10 +1379,13 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
             input: .incomingEdge(from: OutputCoordinate(nodeId: trueValueNodeId, portId: 0))
         )
 
+        let pickerOutput = outputValue(for: trueValueNodeId) ?? .number(0.0)
+
         let optionPickerNodeId = createFunctionNode(
             patch: .optionPicker,
             inputs: [conditionInput, falseInput, trueInput],
-            outputValue: 0.0
+            outputValue: pickerOutput,
+            nodeId: nodeId
         )
 
         // Add to stack
@@ -1091,6 +1436,14 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
 
         print("\(indent())⚡ Processing if-else operation: if \(String(conditionNodeId.uuidString.prefix(8))) { \(String(trueValueNodeId.uuidString.prefix(8))) } else { \(String(falseValueNodeId.uuidString.prefix(8))) }")
 
+        if let conditionValue = outputValue(for: conditionNodeId),
+           case .boolean = conditionValue {
+            // ok
+        } else {
+            print("\(indent())❌ If condition does not resolve to a boolean value")
+            return .skipChildren
+        }
+
         // Create the OptionPicker node (same logic as ternary)
         let nodeId = UUID()
         let conditionInputCoord = InputCoordinate(nodeId: nodeId, portId: 0)
@@ -1112,10 +1465,13 @@ class ProjectDataBuilderVisitor: SyntaxVisitor {
             input: .incomingEdge(from: OutputCoordinate(nodeId: trueValueNodeId, portId: 0))
         )
 
+        let pickerOutput = outputValue(for: trueValueNodeId) ?? .number(0.0)
+
         let optionPickerNodeId = createFunctionNode(
             patch: .optionPicker,
             inputs: [conditionInput, falseInput, trueInput],
-            outputValue: 0.0
+            outputValue: pickerOutput,
+            nodeId: nodeId
         )
 
         // Add to stack

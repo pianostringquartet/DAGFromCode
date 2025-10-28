@@ -1,0 +1,8 @@
+{
+  "plan_path": "prompts/graph-boolean-color-support/plan.md",
+  "agent_count": 2,
+  "agents": ["agent-a1", "agent-a2"],
+  "branch": "preserve-value-node-decimals",
+  "repo_root": "/Users/christianjclampitt/Documents/wissenschaft/DAGFromCode",
+  "created_at": "2025-10-27T17:10:50-06:00"
+}

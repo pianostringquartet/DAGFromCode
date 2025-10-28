@@ -9,6 +9,16 @@ import Testing
 import Foundation
 @testable import DAGFromCode
 
+extension DAGValue: ExpressibleByFloatLiteral, ExpressibleByIntegerLiteral {
+    public init(floatLiteral value: Double) {
+        self = .number(value)
+    }
+
+    public init(integerLiteral value: Int) {
+        self = .number(Double(value))
+    }
+}
+
 // MARK: - Supporting Types for Testing
 
 // Using actual DAG types: InputValue and OutputCoordinate from DAGFromCode/Mapping.swift
@@ -41,16 +51,55 @@ struct DAGFromCodeTests {
         }
     }
 
-    func findValueNodes(_ dag: DAG, withValue value: Double) -> [DAGFunctionNode] {
+    func findValueNodes(_ dag: DAG, matching expectedValue: DAGValue) -> [DAGFunctionNode] {
         return dag.getAllNodes().compactMap { node in
             if case .function(let functionNode) = node,
                functionNode.patch == .value,
                let firstInput = functionNode.inputs.first,
                case .value(let nodeValue) = firstInput.input,
-               nodeValue == value {
+               nodeValue == expectedValue {
                 return functionNode
             }
             return nil
+        }
+    }
+
+    func findValueNodes(_ dag: DAG, withValue value: Double) -> [DAGFunctionNode] {
+        return findValueNodes(dag, matching: .number(value))
+    }
+
+    func findBooleanNodes(_ dag: DAG, equals expected: Bool) -> [DAGFunctionNode] {
+        return findValueNodes(dag, matching: .boolean(expected))
+    }
+
+    func findLayerInputNodes(_ dag: DAG, kind: PrototypeLayerInputKind) -> [DAGLayerInputNode] {
+        return dag.getAllNodes().compactMap { node in
+            if case .layerInput(let layerInputNode) = node,
+               layerInputNode.layerInput == kind {
+                return layerInputNode
+            }
+            return nil
+        }
+    }
+
+    func namedColorValue(_ name: String) -> ColorValue {
+        switch name {
+        case "red":
+            return ColorValue(name: name, red: 1.0, green: 0.0, blue: 0.0, alpha: 1.0)
+        case "blue":
+            return ColorValue(name: name, red: 0.0, green: 0.0, blue: 1.0, alpha: 1.0)
+        case "green":
+            return ColorValue(name: name, red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0)
+        case "black":
+            return ColorValue(name: name, red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)
+        case "white":
+            return ColorValue(name: name, red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0)
+        case "gray":
+            return ColorValue(name: name, red: 0.5, green: 0.5, blue: 0.5, alpha: 1.0)
+        case "clear":
+            return ColorValue(name: name, red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
+        default:
+            return ColorValue(name: name, red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)
         }
     }
 
@@ -209,7 +258,7 @@ struct DAGFromCodeTests {
             #expect(functionNode.patch == .value)
             if let firstInput = functionNode.inputs.first,
                case .value(let val) = firstInput.input {
-                #expect(val == 4.0)
+                #expect(val == .number(4.0))
             } else {
                 Issue.record("Expected value input")
             }
@@ -217,6 +266,23 @@ struct DAGFromCodeTests {
             Issue.record("Expected function node, got layer input")
         case nil:
             Issue.record("Expected root node")
+        }
+    }
+
+    @Test func parseBooleanLiteralProducesBooleanValue() throws {
+        let source = "true"
+        guard let dag = ProjectDataParser.parse(source)?.graph else {
+            #expect(Bool(false), "Expected valid DAG")
+            return
+        }
+
+        let trueNodes = findBooleanNodes(dag, equals: true)
+        #expect(trueNodes.count == 1, "Expected exactly one boolean true node")
+
+        if let node = trueNodes.first {
+            #expect(node.output.value == .boolean(true), "Value node should emit a boolean payload")
+        } else {
+            Issue.record("Missing boolean value node for literal 'true'")
         }
     }
 
@@ -454,7 +520,7 @@ struct DAGFromCodeTests {
         #expect(rootNode?.patch == .value)
         if let firstInput = rootNode?.inputs.first,
            case .value(let val) = firstInput.input {
-            #expect(val == 2.5)
+            #expect(val == .number(2.5))
         } else {
             Issue.record("Expected value input")
         }
@@ -517,7 +583,7 @@ struct DAGFromCodeTests {
                 #expect(valueNode?.patch == .value)
                 if let valueInput = valueNode?.inputs.first,
                    case .value(let val) = valueInput.input {
-                    #expect(val == 4.0)
+                    #expect(val == .number(4.0))
                 }
             }
         }
@@ -718,7 +784,7 @@ struct DAGFromCodeTests {
             #expect(leftValueNode?.patch == .value)
             if let valueInput = leftValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
-                #expect(val == 1.0)
+                #expect(val == .number(1.0))
             }
         }
 
@@ -730,7 +796,7 @@ struct DAGFromCodeTests {
             #expect(rightValueNode?.patch == .value)
             if let valueInput = rightValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
-                #expect(val == 2.0)
+                #expect(val == .number(2.0))
             }
         }
     }
@@ -887,7 +953,7 @@ struct DAGFromCodeTests {
             #expect(valueNode?.patch == .value)
             if let valueInput = valueNode?.inputs.first,
                case .value(let val) = valueInput.input {
-                #expect(val == 9.0)
+                #expect(val == .number(9.0))
             }
         }
     }
@@ -920,9 +986,14 @@ struct DAGFromCodeTests {
 
         // Validate connections: Add should receive inputs from both value nodes
         let addNode = addNodes.first!
-        let expectedAddSources: [InputValue] = [.incomingEdge(from: OutputCoordinate(nodeId: value8Nodes[0].nodeId, portId: 0)), .incomingEdge(from: OutputCoordinate(nodeId: value8Nodes[1].nodeId, portId: 0))]
-        #expect(validateInputSources(dag, nodeId: addNode.nodeId, expectedSources: expectedAddSources),
-                "Add node should receive inputs from both ValueNode(8) instances")
+        let actualSources: Set<OutputCoordinate> = Set(addNode.inputs.compactMap {
+            if case .incomingEdge(let from) = $0.input {
+                return from
+            }
+            return nil
+        })
+        let expectedSourceIds: Set<OutputCoordinate> = Set(value8Nodes.map { OutputCoordinate(nodeId: $0.nodeId, portId: 0) })
+        #expect(actualSources == expectedSourceIds, "Add node should receive inputs from both ValueNode(8) instances")
 
         // Validate node roles
         let nodeRoles = classifyNodesByRole(dag)
@@ -1268,7 +1339,7 @@ struct DAGFromCodeTests {
         #expect(dag.nodes.count == 4) // true, 5, 10, ?:
 
         // Find all node types
-        let trueNodes = findValueNodes(dag, withValue: 1.0) // true = 1.0
+        let trueNodes = findBooleanNodes(dag, equals: true)
         let value5Nodes = findValueNodes(dag, withValue: 5.0)
         let value10Nodes = findValueNodes(dag, withValue: 10.0)
         let optionPickerNodes = findNodesByFunction(dag, function: .optionPicker)
@@ -1278,6 +1349,9 @@ struct DAGFromCodeTests {
         #expect(value5Nodes.count == 1, "Expected exactly one ValueNode with value 5")
         #expect(value10Nodes.count == 1, "Expected exactly one ValueNode with value 10")
         #expect(optionPickerNodes.count == 1, "Expected exactly one OptionPicker node")
+        if let booleanNode = trueNodes.first {
+            #expect(booleanNode.output.value == .boolean(true), "Condition node should emit boolean true")
+        }
 
         // Validate connections: OptionPicker should receive condition (true), false value (10), true value (5)
         let optionPickerNode = optionPickerNodes.first!
@@ -1293,6 +1367,55 @@ struct DAGFromCodeTests {
 
         // Validate topological structure
         #expect(validateTopologicalOrder(dag), "DAG should have valid topological order (no cycles)")
+    }
+
+    @Test func parseColorTernaryFillUsesIncomingEdge() throws {
+        let source = "Rectangle().fill(true ? Color.red : Color.blue)"
+        guard let projectData = ProjectDataParser.parse(source) else {
+            #expect(Bool(false), "Expected valid ProjectData")
+            return
+        }
+
+        let dag = projectData.graph
+
+        let trueNodes = findBooleanNodes(dag, equals: true)
+        #expect(trueNodes.count == 1, "Expected a boolean value node for the ternary condition")
+        if let booleanNode = trueNodes.first {
+            #expect(booleanNode.output.value == .boolean(true), "Condition node should output boolean true")
+        }
+
+        let redNodes = findValueNodes(dag, matching: .color(namedColorValue("red")))
+        let blueNodes = findValueNodes(dag, matching: .color(namedColorValue("blue")))
+        #expect(redNodes.count == 1, "Expected Color.red to become a color value node")
+        #expect(blueNodes.count == 1, "Expected Color.blue to become a color value node")
+
+        let optionPickers = findNodesByFunction(dag, function: .optionPicker)
+        #expect(optionPickers.count == 1, "Expected exactly one OptionPicker node for the ternary")
+        if let picker = optionPickers.first {
+            #expect(picker.output.value.asColor != nil, "OptionPicker output should be a color payload")
+        }
+
+        let fillInputs = findLayerInputNodes(dag, kind: .fill)
+        #expect(fillInputs.count == 1, "Expected a single fill layer input node")
+        if let fillNode = fillInputs.first {
+            switch fillNode.input.input {
+            case .incomingEdge(let coordinate):
+                if let picker = optionPickers.first {
+                    #expect(coordinate.nodeId == picker.nodeId, ".fill should reference OptionPicker output")
+                }
+            case .value(let literal):
+                Issue.record("Expected fill input to reference an incoming edge, found literal \(literal)")
+            }
+        }
+
+        if let layer = projectData.views.first,
+           let fillModifier = layer.modifiers.first(where: { $0.kind == .fill }) {
+            if let typed = fillModifier.typedPayload {
+                #expect(typed.asColor != nil, "Fill modifier typed payload should describe a color when present")
+            }
+        } else {
+            Issue.record("Expected rectangle layer with fill modifier")
+        }
     }
 
     @Test func parseComparisonTernary() throws {
@@ -1415,15 +1538,15 @@ struct DAGFromCodeTests {
         #expect(dag.nodes.count == 7) // true, false, 1, 2, 3, inner ?:, outer ?:
 
         // Find all node types
-        let value1Nodes = findValueNodes(dag, withValue: 1.0) // true
-        let value0Nodes = findValueNodes(dag, withValue: 0.0) // false
-        let literal1Nodes = findValueNodes(dag, withValue: 1.0) // Will include both true and literal 1
+        let trueNodes = findBooleanNodes(dag, equals: true)
+        let falseNodes = findBooleanNodes(dag, equals: false)
+        let literal1Nodes = findValueNodes(dag, matching: .number(1.0))
         let value2Nodes = findValueNodes(dag, withValue: 2.0)
         let value3Nodes = findValueNodes(dag, withValue: 3.0)
         let optionPickerNodes = findNodesByFunction(dag, function: .optionPicker)
 
         // Verify node counts (note: 1.0 appears twice - as 'true' and as literal '1')
-        #expect(value0Nodes.count == 1, "Expected exactly one ValueNode with value 0 (false)")
+        #expect(falseNodes.count == 1, "Expected exactly one ValueNode representing false")
         #expect(value2Nodes.count == 1, "Expected exactly one ValueNode with value 2")
         #expect(value3Nodes.count == 1, "Expected exactly one ValueNode with value 3")
         #expect(optionPickerNodes.count == 2, "Expected exactly two OptionPicker nodes (nested)")
@@ -1469,7 +1592,7 @@ struct DAGFromCodeTests {
             #expect(conditionValueNode?.patch == .value)
             if let valueInput = conditionValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
-                #expect(val == 1.0) // true = 1.0
+                #expect(val == .boolean(true))
             }
         }
 
@@ -1481,7 +1604,7 @@ struct DAGFromCodeTests {
             #expect(falseValueNode?.patch == .value)
             if let valueInput = falseValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
-                #expect(val == 10.0)
+                #expect(val == .number(10.0))
             }
         }
 
@@ -1493,7 +1616,7 @@ struct DAGFromCodeTests {
             #expect(trueValueNode?.patch == .value)
             if let valueInput = trueValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
-                #expect(val == 5.0)
+                #expect(val == .number(5.0))
             }
         }
     }
@@ -1513,7 +1636,7 @@ struct DAGFromCodeTests {
         #expect(dag.nodes.count == 4) // true, 5, 10, if-else
 
         // Find all node types (true = 1.0 internally)
-        let trueNodes = findValueNodes(dag, withValue: 1.0)
+        let trueNodes = findBooleanNodes(dag, equals: true)
         let value5Nodes = findValueNodes(dag, withValue: 5.0)
         let value10Nodes = findValueNodes(dag, withValue: 10.0)
         let optionPickerNodes = findNodesByFunction(dag, function: .optionPicker)
@@ -1650,15 +1773,17 @@ struct DAGFromCodeTests {
         }
 
         // Find specific node types
-        let value1Nodes = findValueNodes(dag, withValue: 1.0) // true
-        let value0Nodes = findValueNodes(dag, withValue: 0.0) // false
+        let trueNodes = findBooleanNodes(dag, equals: true)
+        let falseNodes = findBooleanNodes(dag, equals: false)
+        let literalOneNodes = findValueNodes(dag, matching: .number(1.0))
         let value2Nodes = findValueNodes(dag, withValue: 2.0) // literal 2
         let value3Nodes = findValueNodes(dag, withValue: 3.0) // literal 3
         let pickerNodes = findNodesByFunction(dag, function: .optionPicker)
 
         // Validate node counts
-        #expect(value1Nodes.count >= 1, "Expected at least 1 node with value 1.0 (true or literal)")
-        #expect(value0Nodes.count >= 1, "Expected at least 1 node with value 0.0 (false)")
+        #expect(trueNodes.count >= 1, "Expected at least 1 boolean true node")
+        #expect(falseNodes.count >= 1, "Expected at least 1 boolean false node")
+        #expect(literalOneNodes.count >= 1, "Expected at least 1 literal numeric 1 node")
         #expect(value2Nodes.count == 1, "Expected 1 node with value 2.0")
         #expect(value3Nodes.count == 1, "Expected 1 node with value 3.0")
         #expect(pickerNodes.count == 2, "Expected 2 option picker nodes (inner and outer)")
@@ -1673,7 +1798,7 @@ struct DAGFromCodeTests {
         #expect(validateTopologicalOrder(dag), "DAG should be acyclic despite complexity")
 
         // Validate legacy properties
-        #expect(projectData?.description == "OptionPicker(ValueNode(1), ValueNode(3), OptionPicker(ValueNode(0), ValueNode(2), ValueNode(1)))")
+        #expect(projectData?.description == "OptionPicker(ValueNode(true), ValueNode(3), OptionPicker(ValueNode(false), ValueNode(2), ValueNode(1)))")
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .optionPicker)
         #expect(rootNode?.inputs.count == 3)
@@ -1697,7 +1822,7 @@ struct DAGFromCodeTests {
             #expect(conditionValueNode?.patch == .value)
             if let valueInput = conditionValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
-                #expect(val == 1.0) // true = 1.0
+                #expect(val == .boolean(true))
             }
         }
 
@@ -1709,7 +1834,7 @@ struct DAGFromCodeTests {
             #expect(falseValueNode?.patch == .value)
             if let valueInput = falseValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
-                #expect(val == 10.0)
+                #expect(val == .number(10.0))
             }
         }
 
@@ -1721,7 +1846,7 @@ struct DAGFromCodeTests {
             #expect(trueValueNode?.patch == .value)
             if let valueInput = trueValueNode?.inputs.first,
                case .value(let val) = valueInput.input {
-                #expect(val == 5.0)
+                #expect(val == .number(5.0))
             }
         }
     }
@@ -1767,7 +1892,7 @@ struct DAGFromCodeTests {
         #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
 
         // Validate legacy properties
-        #expect(projectData?.description == "ValueNode(5) -> RoundedNode")
+        #expect(projectData?.description == "ValueNode(5.9) -> RoundedNode")
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .rounded)
     }
@@ -1811,7 +1936,7 @@ struct DAGFromCodeTests {
         #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
 
         // Validate legacy properties
-        #expect(projectData?.description == "ValueNode(5) -> MagnitudeNode")
+        #expect(projectData?.description == "ValueNode(5.9) -> MagnitudeNode")
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .magnitude)
     }
@@ -1870,7 +1995,7 @@ struct DAGFromCodeTests {
         #expect(executionPath == [.magnitude, .rounded], "Execution path should show magnitude -> rounded")
 
         // Validate legacy properties
-        #expect(projectData?.description == "ValueNode(5) -> RoundedNode -> MagnitudeNode")
+        #expect(projectData?.description == "ValueNode(5.9) -> RoundedNode -> MagnitudeNode")
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .magnitude)
     }
@@ -1929,7 +2054,7 @@ struct DAGFromCodeTests {
         #expect(validateTopologicalOrder(dag), "DAG should be acyclic")
 
         // Validate legacy properties
-        #expect(projectData?.description == "ValueNode(2) -> RoundedNode")
+        #expect(projectData?.description == "ValueNode(2.7) -> RoundedNode")
 
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .rounded)
@@ -1989,7 +2114,7 @@ struct DAGFromCodeTests {
         #expect(executionPath == [.sin, .rounded], "Execution path should show sin -> rounded")
 
         // Validate legacy properties
-        #expect(projectData?.description == "ValueNode(5) -> RoundedNode -> SinNode")
+        #expect(projectData?.description == "ValueNode(5.9) -> RoundedNode -> SinNode")
         let rootNode = projectData?.graph.getRootNode()
         #expect(rootNode?.patch == .sin)
     }
@@ -2071,8 +2196,10 @@ struct DAGFromCodeTests {
 
         // Verify we have one ValueNode(8) and one ValueNode(12)
         let values = valueNodes.compactMap { node -> Double? in
-            guard let input = node.inputs.first, case .value(let val) = input.input else { return nil }
-            return val
+            guard let input = node.inputs.first,
+                  case .value(let val) = input.input,
+                  let number = val.asNumber else { return nil }
+            return number
         }.sorted()
         #expect(values == [8.0, 12.0], "Expected values [8.0, 12.0] but got \(values)")
     }
@@ -2100,6 +2227,7 @@ struct DAGFromCodeTests {
         #expect(modifier.kind == .opacity)
         #expect(modifier.argumentDescription == "0.5")
         #expect(modifier.numericPayloads == [0.5])
+        #expect(modifier.typedPayload == .number(0.5), "Opacity modifier should store numeric typed payload")
     }
 
     @Test func parseEllipseFillModifierCapturesArgumentDescription() throws {
@@ -2123,6 +2251,7 @@ struct DAGFromCodeTests {
         #expect(modifier.kind == .fill)
         #expect(modifier.argumentDescription == "Color.red")
         #expect(modifier.numericPayloads.isEmpty)
+        #expect(modifier.typedPayload == .color(namedColorValue("red")), "Fill modifier should store color typed payload")
     }
 
     @Test func parseRectangleFillOpacityChainPreservesModifierOrder() throws {

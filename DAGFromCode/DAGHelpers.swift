@@ -38,7 +38,7 @@ extension DAGLayerInputNode: DAGNodeProtocol {
 
 struct DAGNodeBuilder {
 
-    static func createValueNode(value: Double) -> DAGNodeType {
+    static func createValueNode(value: DAGValue) -> DAGNodeType {
         let nodeId = UUID()
         let output = NodeOutput(
             id: OutputCoordinate(nodeId: nodeId, portId: 0),
@@ -61,11 +61,18 @@ struct DAGNodeBuilder {
     }
 
     static func createFunctionNode(
+        nodeId: UUID = UUID(),
         patch: DAGFunction,
         inputs: [NodeInput],
-        outputValue: Double
+        outputValue: DAGValue
     ) -> DAGNodeType {
-        let nodeId = UUID()
+        let normalizedInputs = inputs.map { input -> NodeInput in
+            let portId = input.id.portId
+            return NodeInput(
+                id: InputCoordinate(nodeId: nodeId, portId: portId),
+                input: input.input
+            )
+        }
         let output = NodeOutput(
             id: OutputCoordinate(nodeId: nodeId, portId: 0),
             value: outputValue
@@ -73,7 +80,7 @@ struct DAGNodeBuilder {
         let functionNode = DAGFunctionNode(
             nodeId: nodeId,
             patch: patch,
-            inputs: inputs,
+            inputs: normalizedInputs,
             output: output
         )
         return .function(functionNode)
@@ -96,11 +103,15 @@ struct DAGNodeBuilder {
 // MARK: - Extensions for easier value creation
 
 extension NodeInput {
-    static func value(_ value: Double, nodeId: UUID, portId: Int = 0) -> NodeInput {
+    static func value(_ value: DAGValue, nodeId: UUID, portId: Int = 0) -> NodeInput {
         NodeInput(
             id: InputCoordinate(nodeId: nodeId, portId: portId),
             input: .value(value)
         )
+    }
+
+    static func number(_ value: Double, nodeId: UUID, portId: Int = 0) -> NodeInput {
+        .value(.number(value), nodeId: nodeId, portId: portId)
     }
 
     static func edge(from outputCoordinate: OutputCoordinate, nodeId: UUID, portId: Int = 0) -> NodeInput {

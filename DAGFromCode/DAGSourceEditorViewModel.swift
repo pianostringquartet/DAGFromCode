@@ -161,6 +161,18 @@ struct DAGSourceEditorPane: View {
                     """)
                 }
 
+                Button("SwiftUI Rectangle Fill") {
+                    viewModel.loadExample("""
+                    let x = 0.25
+                    let y = 0.25
+                    let z = x + y
+
+                    Rectangle()
+                        .fill(Color.red)
+                        .opacity(z)
+                    """)
+                }
+
                 Button("Simple Addition") {
                     viewModel.loadExample("""
                     let x = 8
