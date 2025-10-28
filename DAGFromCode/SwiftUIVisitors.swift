@@ -86,12 +86,14 @@ func createLayerInputNode(layerInput: PrototypeLayerInputKind, input: NodeInput)
 func createPrototypeLayerModifier(
     kind: PrototypeLayerInputKind,
     argumentDescription: String? = nil,
-    numericPayloads: [Double] = []
+    numericPayloads: [Double] = [],
+    typedPayload: DAGValue? = nil
 ) -> PrototypeLayerModifier {
     PrototypeLayerModifier(
         kind: kind,
         argumentDescription: argumentDescription,
-        numericPayloads: numericPayloads
+        numericPayloads: numericPayloads,
+        typedPayload: typedPayload
     )
 }
 

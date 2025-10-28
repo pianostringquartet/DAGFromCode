@@ -7,6 +7,18 @@
 
 import SwiftUI
 
+private func describeDAGValue(_ value: DAGValue) -> String {
+    switch value {
+    case .number(let number):
+        return number.cleanNumericString
+    case .boolean(let flag):
+        return flag ? "true" : "false"
+    case .color(let color):
+        let nameComponent = color.name.map { "\($0) " } ?? ""
+        return "\(nameComponent)rgba(\(color.red.cleanNumericString),\(color.green.cleanNumericString),\(color.blue.cleanNumericString),\(color.alpha.cleanNumericString))"
+    }
+}
+
 struct DAGDebugView: View {
     @StateObject private var viewModel = DAGSourceEditorViewModel()
 
@@ -97,7 +109,7 @@ struct DAGDebugView: View {
             case .value:
                 if let input = functionNode.inputs.first,
                    case .value(let val) = input.input {
-                    return "ValueNode(\(val.cleanNumericString))"
+                    return "ValueNode(\(describeDAGValue(val)))"
                 }
                 return "ValueNode(?)"
             case .sin:
@@ -532,10 +544,10 @@ private extension DAGDebugView {
                         .padding()
                 }
             }
-            .background(Color(.secondarySystemBackground))
+            .background(Color.platformSecondaryBackground)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color(.separator).opacity(0.3), lineWidth: 1)
+                    .stroke(Color.platformSeparator.opacity(0.3), lineWidth: 1)
             )
             .padding(.horizontal)
             .padding(.bottom)
@@ -598,7 +610,7 @@ private struct SwiftUILayerListRow: View {
             SwiftUILayerRenderedPreview(layer: layer)
         }
         .padding(10)
-        .background(Color(.secondarySystemBackground))
+        .background(Color.platformSecondaryBackground)
         .cornerRadius(8)
     }
 }
@@ -619,15 +631,23 @@ private struct SwiftUILayerModifierRow: View {
                     .foregroundColor(.secondary)
             }
 
-            if !modifier.numericPayloads.isEmpty {
-                Text(numericSummary)
+            if let payloadSummary = payloadSummary {
+                Text(payloadSummary)
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
         }
     }
 
-    private var numericSummary: String {
+    private var payloadSummary: String? {
+        if let typedPayload = modifier.typedPayload {
+            return "Payload: \(describeDAGValue(typedPayload))"
+        }
+
+        guard !modifier.numericPayloads.isEmpty else {
+            return nil
+        }
+
         let values = modifier.numericPayloads.map { $0.cleanNumericString }.joined(separator: ", ")
         let prefix = modifier.numericPayloads.count == 1 ? "Value" : "Values"
         return "\(prefix): \(values)"
@@ -688,9 +708,15 @@ private struct SwiftUILayerPreviewParameters {
         for modifier in layer.modifiers {
             switch modifier.kind {
             case .fill:
-                resolvedFill = Color.fromPrototypeArgument(modifier.argumentDescription)
+                if let colorValue = modifier.typedPayload?.asColor {
+                    resolvedFill = Color(colorValue)
+                } else {
+                    resolvedFill = Color.fromPrototypeArgument(modifier.argumentDescription)
+                }
             case .opacity:
-                if let value = modifier.numericPayloads.first {
+                if let value = modifier.typedPayload?.asNumber {
+                    resolvedOpacity *= value
+                } else if let value = modifier.numericPayloads.first {
                     resolvedOpacity *= value
                 }
             case .scaleEffect:
@@ -703,7 +729,11 @@ private struct SwiftUILayerPreviewParameters {
     }
 }
 
-private extension Color {
+extension Color {
+    init(_ value: ColorValue) {
+        self.init(red: value.red, green: value.green, blue: value.blue, opacity: value.alpha)
+    }
+
     static func fromPrototypeArgument(_ description: String?) -> Color? {
         guard let raw = description?.trimmingCharacters(in: .whitespacesAndNewlines),
               raw.hasPrefix("Color.") else {
@@ -726,6 +756,26 @@ private extension Color {
         default:
             return nil
         }
+    }
+
+    static var platformSecondaryBackground: Color {
+#if os(macOS) && !targetEnvironment(macCatalyst)
+        Color(NSColor.windowBackgroundColor)
+#elseif canImport(UIKit)
+        Color(UIColor.secondarySystemBackground)
+#else
+        Color.gray.opacity(0.12)
+#endif
+    }
+
+    static var platformSeparator: Color {
+#if os(macOS) && !targetEnvironment(macCatalyst)
+        Color(NSColor.separatorColor)
+#elseif canImport(UIKit)
+        Color(UIColor.separator)
+#else
+        Color.gray.opacity(0.4)
+#endif
     }
 }
 

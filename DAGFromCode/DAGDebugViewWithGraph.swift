@@ -129,11 +129,11 @@ private struct SwiftUILayerSidebar: View {
                 .padding(.horizontal, 16)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(Color(.secondarySystemBackground))
+        .background(Color.platformSecondaryBackground)
         .cornerRadius(8)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(Color(.separator).opacity(0.3), lineWidth: 1)
+                .stroke(Color.platformSeparator.opacity(0.3), lineWidth: 1)
         )
     }
 }

@@ -53,13 +53,25 @@ extension ProjectData: CustomStringConvertible {
                 return name
             }
 
+            func describeLiteral(_ value: DAGValue) -> String {
+                switch value {
+                case .number(let number):
+                    return number.cleanNumericString
+                case .boolean(let bool):
+                    return bool ? "true" : "false"
+                case .color(let color):
+                    let nameComponent = color.name.map { "\($0) " } ?? ""
+                    return "\(nameComponent)rgba(\(color.red.cleanNumericString),\(color.green.cleanNumericString),\(color.blue.cleanNumericString),\(color.alpha.cleanNumericString))"
+                }
+            }
+
             switch node {
             case .function(let functionNode):
                 switch functionNode.patch {
                 case .value:
                     if let firstInput = functionNode.inputs.first,
                        case .value(let val) = firstInput.input {
-                        let desc = "ValueNode(\(val.cleanNumericString))"
+                        let desc = "ValueNode(\(describeLiteral(val)))"
                         print("\(indent)   -> \(desc)")
                         return desc
                     }

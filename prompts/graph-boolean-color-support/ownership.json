@@ -1,0 +1,17 @@
+{
+  "agent-a1": [
+    "DAGFromCode/Mapping.swift",
+    "DAGFromCode/SwiftSyntaxVisitor.swift",
+    "DAGFromCode/ProjectDataParser.swift"
+  ],
+  "agent-a2": [
+    "DAGFromCode/DAGGraphView.swift",
+    "DAGFromCodeTests/**"
+  ],
+  "shared_read_only": [
+    "DAGFromCode.xcodeproj/**",
+    "Assets.xcassets/**",
+    "prompts/graph-boolean-color-support/**"
+  ],
+  "integration_notes": "Log any required edits outside owned paths before touching shared files."
+}
