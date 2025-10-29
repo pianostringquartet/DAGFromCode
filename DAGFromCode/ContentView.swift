@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var selectedTab = 1
+    @State private var selectedTab = 2
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -25,6 +25,13 @@ struct ContentView: View {
                     Text("Graph View")
                 }
                 .tag(1)
+
+            CodexBridgeView()
+                .tabItem {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                    Text("Codex Bridge")
+                }
+                .tag(2)
         }
         .frame(minWidth: 1000, minHeight: 700)
     }
