@@ -1,0 +1,69 @@
+---
+title: scrollIndicatorsFlash(trigger:)
+description: Flashes the scroll indicators of scrollable views when a value changes.
+source: https://developer.apple.com/documentation/swiftui/view/scrollindicatorsflash(trigger:)
+timestamp: 2025-10-29T00:09:56.380Z
+---
+
+**Navigation:** [Swiftui](/documentation/swiftui) › [view](/documentation/swiftui/view)
+
+**Instance Method**
+
+# scrollIndicatorsFlash(trigger:)
+
+**Available on:** iOS 17.0+, iPadOS 17.0+, Mac Catalyst 17.0+, macOS 14.0+, tvOS 17.0+, visionOS 1.0+, watchOS 10.0+
+
+> Flashes the scroll indicators of scrollable views when a value changes.
+
+```swift
+nonisolated func scrollIndicatorsFlash(trigger value: some Equatable) -> some View
+```
+
+## Parameters
+
+**value**
+
+The value that causes scroll indicators to flash. The value must conform to the [Equatable](/documentation/Swift/Equatable) protocol.
+
+
+
+## Return Value
+
+A view that flashes any visible scroll indicators when a value changes.
+
+## Discussion
+
+When the value that you provide to this modifier changes, the scroll indicators of any scrollable views within the modified view hierarchy briefly flash. The following example configures the scroll indicators to flash any time `flashCount` changes:
+
+```swift
+@State private var isPresented = false
+@State private var flashCount = 0
+
+ScrollView {
+    // ...
+}
+.scrollIndicatorsFlash(trigger: flashCount)
+.sheet(isPresented: $isPresented) {
+    // ...
+}
+.onChange(of: isPresented) { newValue in
+    if newValue {
+        flashCount += 1
+    }
+}
+```
+
+Only scroll indicators that you configure to be visible flash. To flash scroll indicators when a scroll view initially appears, use [scrollIndicatorsFlash(onAppear:)](/documentation/swiftui/view/scrollindicatorsflash(onappear:)) instead.
+
+## Showing scroll indicators
+
+- [scrollIndicatorsFlash(onAppear:)](/documentation/swiftui/view/scrollindicatorsflash(onappear:))
+- [scrollIndicators(_:axes:)](/documentation/swiftui/view/scrollindicators(_:axes:))
+- [horizontalScrollIndicatorVisibility](/documentation/swiftui/environmentvalues/horizontalscrollindicatorvisibility)
+- [verticalScrollIndicatorVisibility](/documentation/swiftui/environmentvalues/verticalscrollindicatorvisibility)
+- [ScrollIndicatorVisibility](/documentation/swiftui/scrollindicatorvisibility)
+
+---
+
+*Extracted by [sosumi.ai](https://sosumi.ai) - Making Apple docs AI-readable.*
+*This is unofficial content. All documentation belongs to Apple Inc.*

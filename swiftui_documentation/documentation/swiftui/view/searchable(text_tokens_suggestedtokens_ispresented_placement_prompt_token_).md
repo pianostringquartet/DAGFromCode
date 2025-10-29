@@ -1,0 +1,77 @@
+---
+title: searchable(text:tokens:suggestedTokens:isPresented:placement:prompt:token:)
+description: Marks this view as searchable with text, tokens, and suggestions, as well as programmatic presentation.
+source: https://developer.apple.com/documentation/swiftui/view/searchable(text:tokens:suggestedtokens:ispresented:placement:prompt:token:)
+timestamp: 2025-10-29T00:10:59.375Z
+---
+
+**Navigation:** [Swiftui](/documentation/swiftui) › [view](/documentation/swiftui/view)
+
+**Instance Method**
+
+# searchable(text:tokens:suggestedTokens:isPresented:placement:prompt:token:)
+
+**Available on:** iOS 17.0+, iPadOS 17.0+, Mac Catalyst 17.0+, macOS 14.0+, visionOS 1.0+
+
+> Marks this view as searchable with text, tokens, and suggestions, as well as programmatic presentation.
+
+```swift
+nonisolated func searchable<C, T, S>(text: Binding<String>, tokens: Binding<C>, suggestedTokens: Binding<C>, isPresented: Binding<Bool>, placement: SearchFieldPlacement = .automatic, prompt: S, @ViewBuilder token: @escaping (C.Element) -> T) -> some View where C : MutableCollection, C : RandomAccessCollection, C : RangeReplaceableCollection, T : View, S : StringProtocol, C.Element : Identifiable
+```
+
+## Parameters
+
+**text**
+
+The text to display and edit in the search field.
+
+
+
+**tokens**
+
+A collection of tokens to display and edit in the search field.
+
+
+
+**suggestedTokens**
+
+A collection of tokens to display as suggestions.
+
+
+
+**placement**
+
+The preferred placement of the search field within the containing view hierarchy.
+
+
+
+**prompt**
+
+A string representing the prompt of the search field which provides users with guidance on what to search for.
+
+
+
+**token**
+
+A view builder that creates a view given an element in tokens.
+
+
+
+## Discussion
+
+For more information about using searchable modifiers, see [Adding-a-search-interface-to-your](/documentation/swiftui/adding-a-search-interface-to-your-app). For information about presenting a search field programmatically, see [Managing-search-interface](/documentation/swiftui/managing-search-interface-activation).
+
+## Detecting, activating, and dismissing search
+
+- [Managing search interface activation](/documentation/swiftui/managing-search-interface-activation)
+- [isSearching](/documentation/swiftui/environmentvalues/issearching)
+- [dismissSearch](/documentation/swiftui/environmentvalues/dismisssearch)
+- [DismissSearchAction](/documentation/swiftui/dismisssearchaction)
+- [searchable(text:isPresented:placement:prompt:)](/documentation/swiftui/view/searchable(text:ispresented:placement:prompt:))
+- [searchable(text:tokens:isPresented:placement:prompt:token:)](/documentation/swiftui/view/searchable(text:tokens:ispresented:placement:prompt:token:))
+- [searchable(text:editableTokens:isPresented:placement:prompt:token:)](/documentation/swiftui/view/searchable(text:editabletokens:ispresented:placement:prompt:token:))
+
+---
+
+*Extracted by [sosumi.ai](https://sosumi.ai) - Making Apple docs AI-readable.*
+*This is unofficial content. All documentation belongs to Apple Inc.*

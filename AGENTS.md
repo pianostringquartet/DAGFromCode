@@ -21,3 +21,9 @@ Write commits in imperative present tense (e.g., “Add DAG debugger toggles”)
 
 ## Agent workflow alignment
 Respect the staged lifecycle: capture discovery in `prompts/research.md`, convert direction into numbered steps in `prompts/plan.md`, and record execution details in `prompts/implement.md`. If you add ingest or QA helpers, document entry and exit criteria so the next agent knows where to resume. Keep runtime transcripts in `sessions/` and telemetry in `log/` to separate guidance from artifacts.
+
+## Searching SwiftUI documentation cache
+1. Load docs from `swiftui_documentation/documentation/swiftui/...`; the manifest at `swiftui_documentation/manifest.json` tracks ETag metadata so the agent reuses the cached Markdown instead of re-downloading pages, and the assistant automatically streams the matching file into context whenever you reference its `doc://` slug.
+2. Locate a symbol by walking the mirror: run `fd --full-path 'view/hovereffect' swiftui_documentation` (or similar glob) to surface likely files, then open the Markdown that matches the desired view modifier or type.
+3. Pivot to content faster with `rg`: use `rg --fixed-strings "hoverEffect(" swiftui_documentation/documentation/swiftui` to find modifiers containing punctuation, add `-n` for line numbers, and scope to Markdown with `--type-add 'md:*.md' --type md` when you want to avoid stray asset hits.
+4. Chain queries when refining results: pipe `rg` output into `rg` again (for example, `rg --files -g '*hovereffect*.md' swiftui_documentation | rg 'GroupHoverEffect'`) so you stay inside the cached docs while narrowing to the exact API variant you need.

@@ -1,0 +1,29 @@
+---
+title: dithersResult
+description: An option that causes the filter to dither the result, to reduce banding.
+source: https://developer.apple.com/documentation/swiftui/graphicscontext/bluroptions/dithersresult
+timestamp: 2025-10-29T00:13:04.829Z
+---
+
+**Navigation:** [Swiftui](/documentation/swiftui) › [graphicscontext](/documentation/swiftui/graphicscontext) › [bluroptions](/documentation/swiftui/graphicscontext/bluroptions)
+
+**Type Property**
+
+# dithersResult
+
+**Available on:** iOS 15.0+, iPadOS 15.0+, Mac Catalyst 15.0+, macOS 12.0+, tvOS 15.0+, visionOS 1.0+, watchOS 8.0+
+
+> An option that causes the filter to dither the result, to reduce banding.
+
+```swift
+static var dithersResult: GraphicsContext.BlurOptions { get }
+```
+
+## Getting blur options
+
+- [opaque](/documentation/swiftui/graphicscontext/bluroptions/opaque)
+
+---
+
+*Extracted by [sosumi.ai](https://sosumi.ai) - Making Apple docs AI-readable.*
+*This is unofficial content. All documentation belongs to Apple Inc.*

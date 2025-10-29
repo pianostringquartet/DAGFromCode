@@ -1,0 +1,37 @@
+---
+title: translation(in:)
+description: Converts the represented gesture recognizer’s current translation to a SwiftUI coordinate space of an ancestor of the view the gesture recognizer is attached to.
+source: https://developer.apple.com/documentation/swiftui/uigesturerecognizerrepresentablecoordinatespaceconverter/translation(in:)
+timestamp: 2025-10-29T00:14:59.566Z
+---
+
+**Navigation:** [Swiftui](/documentation/swiftui) › [uigesturerecognizerrepresentablecoordinatespaceconverter](/documentation/swiftui/uigesturerecognizerrepresentablecoordinatespaceconverter)
+
+**Instance Method**
+
+# translation(in:)
+
+**Available on:** iOS 18.0+, iPadOS 18.0+, Mac Catalyst 18.0+
+
+> Converts the represented gesture recognizer’s current translation to a SwiftUI coordinate space of an ancestor of the view the gesture recognizer is attached to.
+
+```swift
+func translation(in coordinateSpace: some CoordinateSpaceProtocol) -> CGPoint?
+```
+
+## Parameters
+
+**coordinateSpace**
+
+The SwiftUI coordinate space to convert to.
+
+
+
+## Discussion
+
+If the gesture recognizer does not implement a `translationInView:` method, returns nil.
+
+---
+
+*Extracted by [sosumi.ai](https://sosumi.ai) - Making Apple docs AI-readable.*
+*This is unofficial content. All documentation belongs to Apple Inc.*
