@@ -1,0 +1,27 @@
+---
+title: radians(_:)
+source: https://developer.apple.com/documentation/swiftui/angle/radians(_:)
+timestamp: 2025-10-29T00:12:44.865Z
+---
+
+**Navigation:** [Swiftui](/documentation/swiftui) › [angle](/documentation/swiftui/angle)
+
+**Type Method**
+
+# radians(_:)
+
+**Available on:** iOS 13.0+, iPadOS 13.0+, Mac Catalyst 13.0+, macOS 10.15+, tvOS 13.0+, visionOS 1.0+, watchOS 6.0+
+
+```swift
+static func radians(_ radians: Double) -> Angle
+```
+
+## Getting constant angles
+
+- [zero](/documentation/swiftui/angle/zero)
+- [degrees(_:)](/documentation/swiftui/angle/degrees(_:))
+
+---
+
+*Extracted by [sosumi.ai](https://sosumi.ai) - Making Apple docs AI-readable.*
+*This is unofficial content. All documentation belongs to Apple Inc.*

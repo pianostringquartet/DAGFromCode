@@ -1,0 +1,53 @@
+---
+title: onCameraCaptureEvent(isEnabled:defaultSoundDisabled:action:)
+description: Used to register an action triggered by system capture events.
+source: https://developer.apple.com/documentation/swiftui/view/oncameracaptureevent(isenabled:defaultsounddisabled:action:)
+timestamp: 2025-10-29T00:09:35.270Z
+---
+
+**Navigation:** [Swiftui](/documentation/swiftui) › [view](/documentation/swiftui/view)
+
+**Instance Method**
+
+# onCameraCaptureEvent(isEnabled:defaultSoundDisabled:action:)
+
+**Available on:** iOS 26.0+, iPadOS 26.0+
+
+> Used to register an action triggered by system capture events.
+
+```swift
+@MainActor @preconcurrency func onCameraCaptureEvent(isEnabled: Bool = true, defaultSoundDisabled: Bool = false, action: @escaping (AVCaptureEvent) -> Void) -> some View
+```
+
+## Parameters
+
+**isEnabled**
+
+A boolean value indicating whether capture events trigger the provided action or not. Set this value to `false` when your application cannot or will not respond to the action callbacks to avoid non-interactive buttons or UI elements.
+
+
+
+**defaultSoundDisabled**
+
+A boolean value indicating whether or not the default sound is disabled.
+
+
+
+**action**
+
+An event handler called when either the primary or secondary events are triggered.
+
+
+
+## Discussion
+
+Events may or may not be sent to applications based on the current system state. Backgrounded applications will not receive events, additionally events will only be sent to applications that are actively using the camera.
+
+If an event from one source begins, then events from other sources will be ignored until the first event ends or is cancelled.
+
+This API is for media capture use cases only.
+
+---
+
+*Extracted by [sosumi.ai](https://sosumi.ai) - Making Apple docs AI-readable.*
+*This is unofficial content. All documentation belongs to Apple Inc.*

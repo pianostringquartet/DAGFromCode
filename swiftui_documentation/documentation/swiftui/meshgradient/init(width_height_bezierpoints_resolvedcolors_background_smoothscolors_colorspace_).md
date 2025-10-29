@@ -1,0 +1,67 @@
+---
+title: init(width:height:bezierPoints:resolvedColors:background:smoothsColors:colorSpace:)
+description: Creates a new gradient mesh specified as a 2D grid of colored points, specifying the Bezier control points explicitly, with already-resolved sRGB colors.
+source: https://developer.apple.com/documentation/swiftui/meshgradient/init(width:height:bezierpoints:resolvedcolors:background:smoothscolors:colorspace:)
+timestamp: 2025-10-29T00:15:34.027Z
+---
+
+**Navigation:** [Swiftui](/documentation/swiftui) › [meshgradient](/documentation/swiftui/meshgradient)
+
+**Initializer**
+
+# init(width:height:bezierPoints:resolvedColors:background:smoothsColors:colorSpace:)
+
+**Available on:** iOS 18.0+, iPadOS 18.0+, Mac Catalyst 18.0+, macOS 15.0+, tvOS 18.0+, visionOS 2.0+, watchOS 11.0+
+
+> Creates a new gradient mesh specified as a 2D grid of colored points, specifying the Bezier control points explicitly, with already-resolved sRGB colors.
+
+```swift
+init(width: Int, height: Int, bezierPoints: [MeshGradient.BezierPoint], resolvedColors: [Color.Resolved], background: Color = .clear, smoothsColors: Bool = true, colorSpace: Gradient.ColorSpace = .device)
+```
+
+## Parameters
+
+**width**
+
+The width of the mesh, i.e. the number of vertices per row.
+
+
+
+**height**
+
+The height of the mesh, i.e. the number of vertices per column.
+
+
+
+**bezierPoints**
+
+The array of points and control points, containing `width x height` elements.
+
+
+
+**resolvedColors**
+
+The array of colors, containing `width x height` elements.
+
+
+
+**background**
+
+The background color, this fills any points outside the defined vertex mesh.
+
+
+
+**smoothsColors**
+
+Whether cubic (smooth) interpolation should be used for the colors in the mesh (rather than only for the shape of the mesh).
+
+
+
+**colorSpace**
+
+The color space in which to interpolate vertex colors.
+
+---
+
+*Extracted by [sosumi.ai](https://sosumi.ai) - Making Apple docs AI-readable.*
+*This is unofficial content. All documentation belongs to Apple Inc.*

@@ -1,0 +1,62 @@
+---
+title: linear
+description: An animation that moves at a constant speed.
+source: https://developer.apple.com/documentation/swiftui/animation/linear
+timestamp: 2025-10-29T00:14:55.235Z
+---
+
+**Navigation:** [Swiftui](/documentation/swiftui) › [animation](/documentation/swiftui/animation)
+
+**Type Property**
+
+# linear
+
+**Available on:** iOS 13.0+, iPadOS 13.0+, Mac Catalyst 13.0+, macOS 10.15+, tvOS 13.0+, visionOS 1.0+, watchOS 6.0+
+
+> An animation that moves at a constant speed.
+
+```swift
+static var linear: Animation { get }
+```
+
+## Return Value
+
+A linear animation with the default duration.
+
+## Discussion
+
+A linear animation provides a mechanical feel to the motion because its speed is consistent from start to finish of the animation. This constant speed makes a linear animation ideal for animating the movement of objects where changes in the speed might feel awkward, such as with an activity indicator.
+
+The following code shows an example of using linear animation to animate the movement of a circle as it moves between the leading and trailing edges of the view. The circle also animates its color change as it moves across the view.
+
+```swift
+struct ContentView: View {
+    @State private var isActive = false
+
+    var body: some View {
+        VStack(alignment: isActive ? .trailing : .leading) {
+            Circle()
+                .fill(isActive ? Color.red : Color.blue)
+                .frame(width: 50, height: 50)
+
+            Button("Animate") {
+                withAnimation(.linear) {
+                    isActive.toggle()
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
+```
+
+The `linear` animation has a default duration of 0.35 seconds. To specify a different duration, use [linear(duration:)](/documentation/swiftui/animation/linear(duration:)).
+
+## Getting linear animations
+
+- [linear(duration:)](/documentation/swiftui/animation/linear(duration:))
+
+---
+
+*Extracted by [sosumi.ai](https://sosumi.ai) - Making Apple docs AI-readable.*
+*This is unofficial content. All documentation belongs to Apple Inc.*
