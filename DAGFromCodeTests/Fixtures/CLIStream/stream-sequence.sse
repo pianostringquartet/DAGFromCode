@@ -1,0 +1,24 @@
+event: delta
+id: delta-001
+data: {"id":"delta-001","type":"delta","timestamp":"2025-10-30T18:05:30.123Z","payload":{"text":"Hel"}}
+
+event: delta
+id: delta-002
+data: {"id":"delta-002","type":"delta","timestamp":"2025-10-30T18:05:30.456Z","payload":{"text":"lo "}}
+
+event: patch
+id: patch-001
+data: {"id":"patch-001","type":"patch","timestamp":"2025-10-30T18:05:31Z","payload":{"text":"Hello world"}}
+
+event: log
+id: stdout-010
+data: {"id":"stdout-010","type":"stdout","timestamp":"2025-10-30T18:05:31.500Z","payload":{"text":"codex ready"}}
+
+event: error
+id: stderr-011
+data: {"id":"stderr-011","type":"stderr","timestamp":"2025-10-30T18:05:32.456Z","payload":{"code":"EPIPE","text":"CLI subprocess terminated"}}
+
+event: done
+id: done-999
+data: {"id":"done-999","type":"done","timestamp":"2025-10-30T18:05:35Z"}
+

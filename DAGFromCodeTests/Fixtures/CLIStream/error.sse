@@ -1,0 +1,4 @@
+event: error
+id: stderr-004
+data: {"id":"stderr-004","type":"stderr","timestamp":"2025-10-30T18:05:32.456Z","payload":{"code":"EPIPE","text":"CLI subprocess terminated"}}
+

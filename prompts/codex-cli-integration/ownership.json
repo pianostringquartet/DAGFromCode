@@ -1,0 +1,23 @@
+{
+  "agent-A": [
+    "scripts/**",
+    "prompts/codex-bridge.md"
+  ],
+  "agent-B": [
+    "DAGFromCode/CodexBridgeDomain.swift",
+    "DAGFromCode/CodexBridgeStateMachine.swift"
+  ],
+  "agent-C": [
+    "DAGFromCode/CodexBridgeViewModel.swift",
+    "DAGFromCode/CodexBridgeView.swift",
+    "DAGFromCode/ContentView.swift"
+  ],
+  "agent-D": [
+    "DAGFromCode/CodexBridgeHTTPClient.swift",
+    "DAGFromCodeTests/**"
+  ],
+  "shared_read_only": [
+    "DAGFromCode/DAGFromCode.entitlements"
+  ],
+  "integration_notes": "Shared files must remain untouched; log required edits."
+}

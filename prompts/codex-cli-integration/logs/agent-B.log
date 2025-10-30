@@ -1,0 +1,21 @@
+# Agent agent-B work log
+# Format: 2025-10-29T23:57:12Z | status | note
+2025-10-29T18:04:48-06:00 | start | picked up subplan
+2025-10-29T18:05:02-06:00 | ok | branch codex-cli-integration
+2025-10-29T18:06:52-06:00 | ok | reducer implemented with backoff
+2025-10-29T20:21:15-06:00 | ok | build ok (Mac Catalyst)
+2025-10-29T20:22:13-06:00 | ok | domain streaming actions added
+2025-10-29T20:22:48-06:00 | needs-integration | align envelope type to domain actions (delta|patch|done); propose streamEnvelopeReceived
+2025-10-29T20:59:35-06:00 | resolved | stream envelope actions aligned; domain uses StreamEnvelope
+2025-10-29T21:37:45-06:00 | start | picked up phase4 subplan
+2025-10-29T21:47:06-06:00 | ok | domain-metadata
+2025-10-29T21:49:13-06:00 | needs-integration | catalyst build fails: CodexBridgeViewModel missing UD keys & action coverage
+2025-10-29T21:49:34-06:00 | ok | reducer-restart
+2025-10-30T17:30:17Z | launcher | start | picked up subplan
+2025-10-30T11:30:29-06:00 | start | picked up phase4 subplan
+2025-10-30T11:32:33-06:00 | ok | domain-metadata
+2025-10-30T11:32:39-06:00 | ok | reducer-restart
+2025-10-30T11:33:11-06:00 | ok | build-ok (Mac Catalyst)
+2025-10-30T17:34:08Z | launcher | failed | child exit 1
+2025-10-30T12:09:37-06:00 | resolved | manual validation clears needs-integration; auth0 MCP handshake noise only
+2025-10-30T14:51:35-06:00 | ok | bridge healthz/stream handshake succeeds; logs archived at sessions/2025-10-30-codex-cli

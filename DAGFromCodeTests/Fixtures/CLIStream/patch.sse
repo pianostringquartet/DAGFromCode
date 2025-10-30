@@ -1,0 +1,4 @@
+event: patch
+id: patch-001
+data: {"id":"patch-001","type":"patch","timestamp":"2025-10-30T18:05:31Z","payload":{"text":"Hello"}}
+

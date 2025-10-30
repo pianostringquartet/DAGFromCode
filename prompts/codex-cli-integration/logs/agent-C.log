@@ -1,0 +1,24 @@
+# Agent agent-C work log
+# Format: 2025-10-29T23:57:12Z | status | note
+2025-10-29T18:02:39-06:00 | start | picked up subplan
+2025-10-29T18:06:10-06:00 | milestone | starting local build
+2025-10-29T20:21:24-06:00 | milestone | viewmodel persistence + backoff, UI copy+fetch added
+2025-10-29T20:21:24-06:00 | build ok | mac catalyst build succeeded
+2025-10-29T20:21:24-06:00 | needs-integration | SSE stream() missing in HTTP client; streaming actions missing in domain; using polling fallback with backoff
+2025-10-29T20:22:13-06:00 | note | detected modified unowned files in working tree; not changed by agent-C this run
+2025-10-29T20:22:55-06:00 | milestone | starting helper on 127.0.0.1:17890
+2025-10-29T20:24:10-06:00 | milestone | switched listening to SSE stream with reconnect/backoff
+2025-10-29T20:27:50-06:00 | milestone | verifying SSE via curl -N /stream
+2025-10-29T20:51:14-06:00 | milestone | sampling SSE stream with 2s timeout
+2025-10-29T20:51:21-06:00 | milestone | posting /prompt then sampling SSE
+2025-10-29T20:59:35-06:00 | resolved | streaming actions + HTTP client available; ViewModel wired to SSE
+2025-10-29T21:37:51-06:00 | start | picked up phase4 subplan
+2025-10-29T21:56:28-06:00 | milestone | viewmodel-cli updates ready
+2025-10-29T21:56:34-06:00 | milestone | ui-status surface updated
+2025-10-29T21:59:00-06:00 | build ok | mac catalyst build succeeded
+2025-10-29T21:59:19-06:00 | note | manual verification pending (no helper in CI)
+2025-10-29T22:16:24-06:00 | build ok | mac catalyst build succeeded after viewmodel/ui revisions
+2025-10-29T22:17:23-06:00 | build ok | mac catalyst build succeeded after state-aligned updates
+2025-10-29T22:18:25-06:00 | build ok | mac catalyst build succeeded (final)
+2025-10-29T22:19:41-06:00 | milestone | ui-status reflects domain health
+2025-10-29T22:20:00-06:00 | milestone | viewmodel-cli aligned with structured envelopes
