@@ -6,6 +6,12 @@
 //
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct CodexBridgeView: View {
     @StateObject private var viewModel = CodexBridgeViewModel()
@@ -55,6 +61,11 @@ struct CodexBridgeView: View {
                 viewModel.send(.requestHealthCheck)
             }
             .keyboardShortcut("r", modifiers: [.command])
+
+            Button("Fetch latest") {
+                viewModel.fetchLatestOnce()
+            }
+            .keyboardShortcut("l", modifiers: [.command])
         }
     }
 
@@ -122,6 +133,10 @@ struct CodexBridgeView: View {
                 if let response = viewModel.state.lastResponse {
                     Button("Clear") {
                         viewModel.send(.clearResponse)
+                    }
+
+                    Button("Copy latest") {
+                        Clipboard.copy(response)
                     }
                 }
 
@@ -215,4 +230,18 @@ struct CodexBridgeView: View {
 #Preview {
     CodexBridgeView()
         .frame(width: 600, height: 500)
+}
+
+private enum Clipboard {
+    static func copy(_ string: String) {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = string
+        #elseif canImport(AppKit)
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(string, forType: .string)
+        #else
+        // No-op fallback
+        #endif
+    }
 }

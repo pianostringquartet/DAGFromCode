@@ -1,2 +1,4 @@
 # Agent agent-D work log
 # Format: 2025-10-29T23:58:18Z | status | note
+2025-10-29T18:05:43-06:00 | tests added | committed local changes for parser/state-machine tests
+2025-10-29T20:21:42-06:00 | build ok | macOS Catalyst build succeeded

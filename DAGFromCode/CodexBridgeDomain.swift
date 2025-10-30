@@ -7,11 +7,59 @@
 
 import Foundation
 
+// MARK: - High-level bridge status
 enum CodexBridgeStatus: Equatable {
     case idle
     case connecting
     case online(message: String)
     case error(description: String)
+}
+
+// MARK: - Streaming domain
+/// Backoff metadata for recovering streaming/polling after transient failures.
+struct StreamBackoff: Equatable {
+    let attempt: Int
+    let delaySeconds: TimeInterval
+}
+
+enum StreamState: Equatable {
+    case idle
+    case listening
+    case backingOff(StreamBackoff)
+    case stopped
+}
+
+/// Streaming payload emitted by `/stream`.
+struct StreamEnvelope: Equatable {
+    enum Kind: Equatable {
+        case delta
+        case patch
+        case done
+        case unknown(String)
+    }
+
+    let kind: Kind
+    let text: String?
+    let raw: String?
+
+    init(kind: Kind, text: String?, raw: String?) {
+        self.kind = kind
+        self.text = text
+        self.raw = raw
+    }
+}
+
+/// Coarse error classes used by the reducer to decide recovery strategy.
+enum StreamFailure: Equatable {
+    case invalidResponse
+    case decoding
+    case httpStatus(Int)
+    case network(description: String)
+    case unauthorized
+    case forbidden
+    case notFound
+    case rateLimited
+    case permanent(description: String)
 }
 
 struct CodexBridgeConfiguration: Equatable {
@@ -29,6 +77,7 @@ struct CodexBridgeConfiguration: Equatable {
 struct CodexBridgeState: Equatable {
     var configuration: CodexBridgeConfiguration
     var status: CodexBridgeStatus
+    var stream: StreamState
     var messageDraft: String
     var lastResponse: String?
     var isSending: Bool
@@ -37,6 +86,7 @@ struct CodexBridgeState: Equatable {
     init(
         configuration: CodexBridgeConfiguration = CodexBridgeConfiguration(),
         status: CodexBridgeStatus = .idle,
+        stream: StreamState = .idle,
         messageDraft: String = "Hello. Sent from Mac Catalyst",
         lastResponse: String? = nil,
         isSending: Bool = false,
@@ -44,6 +94,7 @@ struct CodexBridgeState: Equatable {
     ) {
         self.configuration = configuration
         self.status = status
+        self.stream = stream
         self.messageDraft = messageDraft
         self.lastResponse = lastResponse
         self.isSending = isSending
@@ -67,6 +118,12 @@ enum CodexBridgeAction: Equatable {
     case stopListening
     case latestMessagePolled(String)
     case latestMessagePollFailed(description: String)
+    // Streaming-specific actions (future-ready; reducer is pure)
+    case streamConnected
+    case streamClosed
+    case streamEnvelopeReceived(StreamEnvelope)
+    case streamFailed(reason: StreamFailure)
+    case streamBackoffElapsed
 }
 
 enum CodexBridgeCommand: Equatable {
