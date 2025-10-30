@@ -66,3 +66,16 @@ The Catalyst scene graph is rooted in `DAGFromCodeApp` → `ContentView`, which 
 - `DAGFromCode/CodexBridgeViewModel.swift:1-126` – Manages health checks, message sends, and a background polling loop that continually fetches `/latest` so incoming CLI messages appear without manual refresh.
 - `DAGFromCode/CodexBridgeView.swift:10-208` – Starts and stops the polling loop on view lifecycle and restarts it whenever host/port/token settings change.
 - `DAGFromCode/CodexBridgeHTTPClient.swift:1-86` – Implements the lightweight `URLSession` client used in development to hit `/healthz` and `/message` on the local bridge server.
+
+## Follow-up Research 2025-10-29T16-05-00
+### Summary
+1. Confirmed Catalyst bridge now targets an in-repo Python helper and identified the gap: Codex CLI is not yet part of the pipeline.
+2. Captured Option 1 path forward—upgrade the helper to host `codex app-server`, add streaming, and normalize hand-off payloads without changing Catalyst entitlements.
+
+### Next steps
+1. `scripts/codex_bridge_server.py` – spawn the Codex CLI `app-server`, translate HTTP `/message` payloads into JSON-RPC requests, track subprocess health, and broadcast Codex events through a new `GET /stream` SSE endpoint.
+2. `DAGFromCode/CodexBridgeDomain.swift` & `DAGFromCode/CodexBridgeStateMachine.swift` – add streaming actions (`streamOpened`, `streamEventReceived`, `streamFailed`, `reconnectRequested`) plus state to reflect SSE status and exponential backoff metadata.
+3. `DAGFromCode/CodexBridgeHTTPClient.swift` – implement `stream(configuration:) -> AsyncThrowingStream<CodexBridgeEnvelope>` using `URLSession.bytes(for:)`, keeping existing `/healthz` and `/message` helpers for manual probes.
+4. `DAGFromCode/CodexBridgeViewModel.swift` – replace the polling task with an SSE consumer, persist host/port/token via `UserDefaults`, and surface backoff or failure hints to the reducer.
+5. `DAGFromCode/CodexBridgeView.swift` – refresh UI copy and controls to show stream connection state, enable copying the JSON envelope, and provide a manual “Fetch latest once” fallback.
+6. `thoughts/work-items/codex-cli-integration/research/` – document the finalized SSE bridge contract (handoff envelope schema, curl examples, helper run instructions) when the implementation lands.

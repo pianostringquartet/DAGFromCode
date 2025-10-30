@@ -1,0 +1,13 @@
+{
+  "name": "Parent Orchestrator",
+  "description": "Plans a feature slug, materializes skills, launches parallel Codex agents, and monitors completion.",
+  "tags": ["orchestration", "planning", "supervision"],
+  "recommendedAgents": ["parent"],
+  "defaults": {
+    "model": "gpt-5-codex",
+    "reasoning": "low",
+    "idleTimeoutSec": 600,
+    "wallTimeoutSec": 3600
+  }
+}
+

@@ -1,0 +1,9 @@
+{
+  "plan_path": "prompts/codex-cli-integration/plan.md",
+  "original_plan_path": "thoughts/work-items/codex-cli-integration/plan/for-1-agents/2025-10-29-ENG-plan-for-1-agents.md",
+  "agent_count": 4,
+  "agents": ["agent-A", "agent-B", "agent-C", "agent-D"],
+  "branch": "codex-cli-integration",
+  "repo_root": "/Users/christianjclampitt/Documents/wissenschaft/DAGFromCode",
+  "created_at": "2025-10-29T23:58:18Z"
+}
