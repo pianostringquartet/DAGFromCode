@@ -24,6 +24,8 @@ struct CodexBridgeView: View {
 
             statusHeader
 
+            errorBanner
+
             bridgeConfigurationSection
 
             Divider()
@@ -34,7 +36,7 @@ struct CodexBridgeView: View {
         }
         .padding()
         .task {
-            viewModel.startListening()
+            viewModel.bootstrap()
         }
         .onDisappear {
             viewModel.stopListening()
@@ -42,30 +44,47 @@ struct CodexBridgeView: View {
     }
 
     private var statusHeader: some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 12, height: 12)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 12, height: 12)
 
-            Text(statusDescription)
-                .font(.headline)
+                Text(statusDescription)
+                    .font(.headline)
 
-            if viewModel.state.isSending {
-                ProgressView()
-                    .scaleEffect(0.7)
+                if viewModel.state.isSending {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+
+                Spacer()
+
+                Button("Check Bridge") {
+                    viewModel.send(.requestHealthCheck)
+                }
+                .keyboardShortcut("r", modifiers: [.command])
+
+                Button("Fetch latest") {
+                    viewModel.fetchLatestOnce()
+                }
+                .keyboardShortcut("l", modifiers: [.command])
             }
 
-            Spacer()
+            HStack(spacing: 12) {
+                processStatusChip
 
-            Button("Check Bridge") {
-                viewModel.send(.requestHealthCheck)
-            }
-            .keyboardShortcut("r", modifiers: [.command])
+                if let detail = processStatusDetail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
 
-            Button("Fetch latest") {
-                viewModel.fetchLatestOnce()
+                Spacer()
+
+                Toggle("Auto restart", isOn: autoRestartBinding)
+                    .toggleStyle(.switch)
             }
-            .keyboardShortcut("l", modifiers: [.command])
         }
     }
 
@@ -109,6 +128,19 @@ struct CodexBridgeView: View {
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
                 }
+
+                VStack(alignment: .leading) {
+                    Text("CLI path override")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    TextField("/usr/local/bin/codex", text: cliPathBinding)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                        .disableAutocorrection(true)
+#if os(iOS) || targetEnvironment(macCatalyst)
+                        .textInputAutocapitalization(.never)
+#endif
+                }
             }
         }
     }
@@ -130,62 +162,281 @@ struct CodexBridgeView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(viewModel.state.isSending)
 
-                if let response = viewModel.state.lastResponse {
-                    Button("Clear") {
-                        viewModel.send(.clearResponse)
-                    }
-
-                    Button("Copy latest") {
-                        Clipboard.copy(response)
-                    }
+                Button("Clear") {
+                    viewModel.send(.clearResponse)
                 }
+                .disabled(viewModel.aggregatedTranscript.isEmpty && viewModel.state.lastResponse == nil)
 
                 Spacer()
+
+                Button("Copy transcript") {
+                    Clipboard.copy(viewModel.aggregatedTranscript)
+                }
+                .disabled(viewModel.aggregatedTranscript.isEmpty)
+                .buttonStyle(.bordered)
             }
 
-            if let response = viewModel.state.lastResponse {
-                responseView(response: response)
+            if let envelopeID = viewModel.latestEnvelopeID {
+                HStack {
+                    Text("Latest envelope")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(envelopeID)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.primary)
+                    Spacer()
+                }
             }
+
+            aggregatedTranscriptView
+
+            promptTimelineSection
         }
     }
 
-    private func responseView(response: String) -> some View {
+    @ViewBuilder
+    private var aggregatedTranscriptView: some View {
+        if !viewModel.aggregatedTranscript.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Aggregated transcript")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                ScrollView {
+                    Text(viewModel.aggregatedTranscript)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .background(Color.platformSecondaryBackground)
+                        .cornerRadius(8)
+                        .font(.system(.body, design: .monospaced))
+                }
+                .frame(minHeight: 120, maxHeight: 220)
+            }
+        } else if let fallback = viewModel.state.lastResponse, !fallback.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Latest response")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(fallback)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Color.platformSecondaryBackground)
+                    .cornerRadius(8)
+                    .font(.system(.body, design: .monospaced))
+            }
+        } else {
+            Text("No transcript received yet.")
+                .font(.footnote)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var promptTimelineSection: some View {
+        let timeline = viewModel.promptTimeline
+
         VStack(alignment: .leading, spacing: 8) {
-            Text("Latest response")
+            Text("Prompt timeline")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            Text(response)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
+
+            if timeline.isEmpty {
+                Text("No prompt activity yet.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(timeline.enumerated()), id: \.element.id) { index, entry in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(entry.id)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundColor(.primary)
+
+                                Spacer()
+
+                                Text(stageLabel(for: entry.stage))
+                                    .font(.caption2)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(stageColor(for: entry.stage).opacity(0.18))
+                                    .foregroundColor(stageColor(for: entry.stage))
+                                    .clipShape(Capsule())
+                            }
+
+                            if let message = entry.lastMessage, !message.isEmpty {
+                                Text(message)
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            Text(entry.updatedAt, style: .time)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 8)
+
+                        if index < timeline.count - 1 {
+                            Divider()
+                        }
+                    }
+                }
+                .padding(12)
                 .background(Color.platformSecondaryBackground)
                 .cornerRadius(8)
-                .font(.system(.body, design: .monospaced))
+            }
         }
     }
 
-    private var statusColor: Color {
-        switch viewModel.state.status {
-        case .idle:
-            return .yellow
-        case .connecting:
-            return .orange
-        case .online:
+    private func stageLabel(for stage: PromptTimelineEntry.Stage) -> String {
+        switch stage {
+        case .pending:
+            return "Pending"
+        case .streaming:
+            return "Streaming"
+        case .completed:
+            return "Completed"
+        case .failed:
+            return "Failed"
+        }
+    }
+
+    private func stageColor(for stage: PromptTimelineEntry.Stage) -> Color {
+        switch stage {
+        case .pending:
+            return .gray
+        case .streaming:
+            return .blue
+        case .completed:
             return .green
-        case .error:
+        case .failed:
             return .red
         }
     }
 
+    private func color(for statusColor: BridgeStatusColor) -> Color {
+        switch statusColor {
+        case .neutral:
+            return .gray
+        case .informative:
+            return .blue
+        case .success:
+            return .green
+        case .warning:
+            return .orange
+        case .critical:
+            return .red
+        }
+    }
+
+    private func formatSeconds(_ seconds: TimeInterval) -> String {
+        if seconds >= 60 {
+            let minutes = Int(seconds) / 60
+            let remaining = seconds.truncatingRemainder(dividingBy: 60)
+            return String(format: "%dm %.0fs", minutes, remaining)
+        } else if seconds >= 1 {
+            return String(format: "%.1fs", seconds)
+        } else {
+            return "<1s"
+        }
+    }
+
+    private var statusColor: Color {
+        color(for: viewModel.state.statusColor)
+    }
+
     private var statusDescription: String {
-        switch viewModel.state.status {
-        case .idle:
-            return "Awaiting bridge command"
-        case .connecting:
-            return "Contacting bridge..."
-        case let .online(message):
-            return message
-        case let .error(description):
-            return description
+        viewModel.state.statusText
+    }
+
+    private var autoRestartBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.autoRestartEnabled },
+            set: { viewModel.autoRestartEnabled = $0 }
+        )
+    }
+
+    private var cliPathBinding: Binding<String> {
+        Binding(
+            get: { viewModel.cliPathOverride },
+            set: { viewModel.cliPathOverride = $0 }
+        )
+    }
+
+    private var processStatusDetail: String? {
+        switch viewModel.state.cliHealth {
+        case .running:
+            switch viewModel.state.stream {
+            case .idle:
+                return "Listening disabled"
+            case .listening:
+                return "Listening for CLI events"
+            case let .backingOff(backoff):
+                return "Backoff attempt \(backoff.attempt) – retry in \(formatSeconds(backoff.delaySeconds))"
+            case let .awaitingCLI(retryIn):
+                if let retryIn {
+                    return "Awaiting CLI – retry in \(formatSeconds(retryIn))"
+                }
+                return "Awaiting CLI"
+            case .stopped:
+                return "Streaming stopped"
+            }
+        case let .degraded(exitCode):
+            return "CLI exited with code \(exitCode)"
+        case let .restartScheduled(retryIn):
+            return "Restart scheduled in \(formatSeconds(retryIn))"
+        }
+    }
+
+    private var processStatusMetrics: (label: String, color: Color) {
+        switch viewModel.state.cliHealth {
+        case .running:
+            return ("CLI running", .green)
+        case let .degraded(exitCode):
+            return ("CLI offline (exit \(exitCode))", .red)
+        case let .restartScheduled(retryIn):
+            let seconds = max(1, Int(retryIn.rounded()))
+            return ("Restarting in \(seconds)s", .orange)
+        }
+    }
+
+    private var processStatusChip: some View {
+        let metrics = processStatusMetrics
+        return Text(metrics.label)
+            .font(.caption)
+            .fontWeight(.semibold)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(metrics.color.opacity(0.15))
+            .foregroundColor(metrics.color)
+            .clipShape(Capsule())
+    }
+
+    @ViewBuilder
+    private var errorBanner: some View {
+        if case .degraded = viewModel.state.cliHealth,
+           let message = viewModel.lastProcessError,
+           !message.isEmpty {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.yellow)
+
+                Text(message)
+                    .font(.callout)
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                if viewModel.state.availableActions.contains(.retryConnection) {
+                    Button("Retry now") {
+                        viewModel.startListening()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(12)
+            .background(Color.red.opacity(0.12))
+            .cornerRadius(10)
         }
     }
 
@@ -244,4 +495,17 @@ private enum Clipboard {
         // No-op fallback
         #endif
     }
+}
+
+struct BlueRectangleView: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.blue)
+            .frame(width: 200, height: 120)
+    }
+}
+
+#Preview("Blue rectangle") {
+    BlueRectangleView()
+        .padding()
 }

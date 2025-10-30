@@ -1,0 +1,4 @@
+event: delta
+id: delta-001
+data: {"id":"delta-001","type":"delta","timestamp":"2025-10-30T18:05:30.123Z","payload":{"text":"Hel"}}
+

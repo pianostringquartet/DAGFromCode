@@ -8,3 +8,8 @@
 2025-10-29T18:05:21-06:00 | phase | launching updated helper for validation
 2025-10-29T18:06:54-06:00 | info | killing existing helper PID 6471 on :17890
 2025-10-29T20:21:15-06:00 | phase | helper sse validated
+2025-10-29T21:37:40-06:00 | start | picked up phase4 subplan
+2025-10-29T23:04:05-06:00 | phase | cli-spawn-ready
+2025-10-29T23:04:10-06:00 | phase | sse-relay
+2025-10-29T23:04:19-06:00 | phase | docs-updated
+2025-10-29T23:04:29-06:00 | phase | validation-complete

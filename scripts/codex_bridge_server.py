@@ -1,36 +1,185 @@
 #!/usr/bin/env python3
-"""
-Dev loopback bridge for Catalyst ↔ Codex CLI with SSE.
+"""HTTP bridge that proxies between Catalyst and the Codex CLI."""
 
-Endpoints:
-  - GET  /healthz          -> { "message": <status or latest prompt> }
-  - POST /prompt {json}    -> { "ack": <envelope id>, "ts": <unix> }
-  - GET  /latest           -> { "message": <latest posted prompt or ""> }
-  - GET  /stream           -> Server-Sent Events (SSE):
-       event: delta|patch|done
-       data: { "id": string, "type": "delta|patch|done", "payload": { ... } }
+from __future__ import annotations
 
-Usage:
-  python3 scripts/codex_bridge_server.py --host 127.0.0.1 --port 17890
-  curl -N http://127.0.0.1:17890/stream
-"""
-
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import json
 import argparse
+import json
+import logging
+import queue
+import signal
+import threading
 import time
 import uuid
-import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Dict, Optional
+
+from codex_cli_process import (
+    CLIEvent,
+    CodexCLIError,
+    CodexCLIProcess,
+    CodexCLIUnavailable,
+)
 
 
-LATEST_MESSAGE = ""
-LAST_ACK_ID = None
+LOGGER = logging.getLogger("bridge")
+if not LOGGER.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter("[bridge] %(levelname)s %(message)s")
+    handler.setFormatter(formatter)
+    LOGGER.addHandler(handler)
+LOGGER.setLevel(logging.INFO)
 
 
-class Handler(BaseHTTPRequestHandler):
-    server_version = "CodexBridge/0.1"
+class SSEHub:
+    """Manages Server-Sent Event subscribers."""
 
-    def _set_json(self, code=200):
+    def __init__(self) -> None:
+        self._subscribers: set["queue.Queue[Dict[str, Any]]"] = set()
+        self._lock = threading.Lock()
+
+    def subscribe(self) -> "queue.Queue[Dict[str, Any]]":
+        subscriber: "queue.Queue[Dict[str, Any]]" = queue.Queue(maxsize=256)
+        with self._lock:
+            self._subscribers.add(subscriber)
+        return subscriber
+
+    def unsubscribe(self, subscriber: "queue.Queue[Dict[str, Any]]") -> None:
+        with self._lock:
+            self._subscribers.discard(subscriber)
+
+    def publish(self, event: Dict[str, Any]) -> None:
+        with self._lock:
+            for subscriber in list(self._subscribers):
+                try:
+                    subscriber.put_nowait(event)
+                except Exception:  # noqa: BLE001
+                    self._subscribers.discard(subscriber)
+
+
+class BridgeApp:
+    """Encapsulates application state shared by request handlers."""
+
+    def __init__(self, *, spawn_cli: bool) -> None:
+        self._spawn_cli = spawn_cli
+        self._hub = SSEHub()
+        self._cli: Optional[CodexCLIProcess] = None
+        self._forwarder: Optional[threading.Thread] = None
+
+        self._latest_message = ""
+        self._latest_prompt = ""
+        self._latest_ack: Optional[str] = None
+        self._lock = threading.Lock()
+
+        if spawn_cli:
+            self._initialize_cli()
+
+    # ------------------------------------------------------------------
+    # Public helpers used by handlers
+    # ------------------------------------------------------------------
+    def hub(self) -> SSEHub:
+        return self._hub
+
+    def send_prompt(self, prompt: str) -> str:
+        with self._lock:
+            self._latest_prompt = prompt
+
+        if not self._spawn_cli:
+            raise CodexCLIUnavailable("CLI subprocess disabled (start server with --spawn-cli)")
+
+        self._initialize_cli()
+        assert self._cli is not None  # for type checkers
+
+        ack = str(uuid.uuid4())
+        try:
+            envelope = self._cli.send_prompt(prompt, envelope_id=ack)
+        except CodexCLIError as exc:
+            raise CodexCLIUnavailable(str(exc)) from exc
+
+        with self._lock:
+            self._latest_ack = envelope
+
+        return envelope
+
+    def latest_snapshot(self) -> Dict[str, Any]:
+        with self._lock:
+            return {
+                "latestPrompt": self._latest_prompt,
+                "latestMessage": self._latest_message,
+                "latestAck": self._latest_ack,
+            }
+
+    def health(self) -> Dict[str, Any]:
+        snapshot = self.latest_snapshot()
+        cli_status: Optional[Dict[str, Any]] = None
+        if self._cli:
+            cli_status = self._cli.health_snapshot()
+
+        status = "ok"
+        if not self._spawn_cli:
+            status = "degraded"
+        elif not cli_status or cli_status.get("state") != "ready":
+            status = "degraded"
+
+        return {
+            "status": status,
+            "cli": cli_status,
+            "bridge": snapshot,
+        }
+
+    def shutdown(self) -> None:
+        if self._cli:
+            self._cli.stop()
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _initialize_cli(self) -> None:
+        if self._cli is None:
+            self._cli = CodexCLIProcess()
+
+        try:
+            self._cli.ensure_running()
+        except CodexCLIUnavailable:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise CodexCLIUnavailable(str(exc)) from exc
+
+        if self._forwarder is None or not self._forwarder.is_alive():
+            self._forwarder = threading.Thread(
+                target=self._forward_events, name="cli-event-forwarder", daemon=True
+            )
+            self._forwarder.start()
+
+    def _forward_events(self) -> None:
+        assert self._cli is not None
+        for event in self._cli.events():
+            self._handle_cli_event(event)
+
+    def _handle_cli_event(self, event: CLIEvent) -> None:
+        payload = {
+            "id": event.envelope_id,
+            "type": event.event_type,
+            "payload": event.payload,
+            "ts": time.time(),
+        }
+
+        if event.event_type in {"patch", "done"}:
+            message = event.payload.get("text") or event.payload.get("message")
+            if message:
+                with self._lock:
+                    self._latest_message = message
+
+        self._hub.publish(payload)
+
+
+class BridgeHTTPRequestHandler(BaseHTTPRequestHandler):
+    server: "BridgeHTTPServer"
+
+    # ----------------------------
+    # Response helpers
+    # ----------------------------
+    def _set_json(self, code: int = 200) -> None:
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -39,125 +188,132 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.end_headers()
 
-    def log_message(self, fmt, *args):
-        # Quiet noisy default logging; keep single-line summary.
-        print("[bridge]", fmt % args)
+    def _json(self, code: int, body: Dict[str, Any]) -> None:
+        self._set_json(code)
+        self.wfile.write(json.dumps(body).encode("utf-8"))
 
-    def do_OPTIONS(self):  # CORS preflight
-        self._set_json(200)
-        self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
+    def log_message(self, fmt: str, *args: Any) -> None:  # noqa: D401 - keep quiet
+        LOGGER.info(fmt, *args)
 
-    def do_GET(self):  # noqa: N802 (http.server naming)
+    # ----------------------------
+    # HTTP verbs
+    # ----------------------------
+    def do_OPTIONS(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler signature
+        self._json(200, {"ok": True})
+
+    def do_GET(self) -> None:  # noqa: N802
         if self.path.startswith("/healthz"):
-            msg = LATEST_MESSAGE or "Bridge online"
-            self._set_json(200)
-            self.wfile.write(json.dumps({"message": msg}).encode("utf-8"))
+            self._json(200, self.server.app.health())
             return
 
         if self.path.startswith("/latest"):
-            self._set_json(200)
-            self.wfile.write(json.dumps({"message": LATEST_MESSAGE}).encode("utf-8"))
+            self._json(200, {"message": self.server.app.latest_snapshot().get("latestMessage", "")})
             return
 
         if self.path.startswith("/stream"):
+            self._handle_stream()
+            return
+
+        self._json(404, {"error": "not_found"})
+
+    def do_POST(self) -> None:  # noqa: N802
+        if not self.path.startswith("/prompt"):
+            self._json(404, {"error": "not_found"})
+            return
+
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            payload = json.loads(raw.decode("utf-8")) if raw else {}
+        except json.JSONDecodeError:
+            self._json(400, {"error": "invalid_json"})
+            return
+
+        prompt = str(payload.get("prompt", payload.get("message", ""))).strip()
+        if not prompt:
+            self._json(400, {"error": "missing_prompt"})
+            return
+
+        try:
+            ack = self.server.app.send_prompt(prompt)
+        except CodexCLIUnavailable as exc:
+            self._json(503, {"error": "cli_unavailable", "detail": str(exc)})
+            return
+
+        self._json(200, {"ack": ack, "ts": time.time()})
+
+    # ----------------------------
+    # Streaming helper
+    # ----------------------------
+    def _handle_stream(self) -> None:
+        subscriber = self.server.app.hub().subscribe()
+        try:
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream; charset=utf-8")
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Connection", "keep-alive")
             self.send_header("Access-Control-Allow-Origin", "*")
-            # Disable proxy buffering if present (harmless otherwise)
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
 
-            # Simple demo producer: emit 2 delta events then done.
-            envelope_id = str(uuid.uuid4())
+            self.wfile.write(b": keepalive\n\n")
+            self.wfile.flush()
 
-            def send_event(event_type: str, payload: dict):
+            quiet_until = time.time() + 15
+            while True:
+                timeout = max(0, quiet_until - time.time())
                 try:
-                    data = json.dumps({
-                        "id": envelope_id,
-                        "type": event_type,
-                        "payload": payload,
-                    })
-                    self.wfile.write(f"event: {event_type}\n".encode("utf-8"))
-                    self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                    event = subscriber.get(timeout=timeout)
+                except queue.Empty:
+                    self.wfile.write(b": keepalive\n\n")
                     self.wfile.flush()
-                except BrokenPipeError:
-                    return False
-                except Exception as e:
-                    print(f"[bridge] stream error: {e}", file=sys.stderr)
-                    return False
-                return True
+                    quiet_until = time.time() + 15
+                    continue
 
-            # Initial heartbeat (comment frame) and an immediate delta burst
-            try:
-                self.wfile.write(b": keepalive\n\n")
-                self.wfile.flush()
-            except Exception:
-                return
-
-            # Emit a tiny demo sequence irrespective of LATEST_MESSAGE
-            text = LATEST_MESSAGE or "hello from codex bridge"
-            chunks = [text[: max(1, len(text)//2)], text[max(1, len(text)//2):]]
-            for ch in chunks:
-                if not send_event("delta", {"text": ch}):
+                if event is None:
                     return
-                time.sleep(0.3)
 
-            # Done
-            send_event("done", {"summary": "demo complete"})
-            return
-
-        self._set_json(404)
-        self.wfile.write(json.dumps({"error": "not_found"}).encode("utf-8"))
-
-    def do_POST(self):  # noqa: N802 (http.server naming)
-        global LATEST_MESSAGE, LAST_ACK_ID
-        length = int(self.headers.get("Content-Length", 0))
-        raw = self.rfile.read(length) if length else b"{}"
-
-        try:
-            payload = json.loads(raw.decode("utf-8")) if raw else {}
-        except Exception:
-            self._set_json(400)
-            self.wfile.write(json.dumps({"error": "invalid_json"}).encode("utf-8"))
-            return
-
-        # Old endpoint is deprecated immediately; guide callers to /prompt
-        if self.path.startswith("/message"):
-            self._set_json(410)
-            self.wfile.write(json.dumps({
-                "error": "gone",
-                "use": "/prompt"
-            }).encode("utf-8"))
-            return
-
-        if self.path.startswith("/prompt"):
-            msg = str(payload.get("prompt", payload.get("message", ""))).strip()
-            LATEST_MESSAGE = msg
-            LAST_ACK_ID = str(uuid.uuid4())
-            self._set_json(200)
-            self.wfile.write(json.dumps({"ack": LAST_ACK_ID, "ts": time.time()}).encode("utf-8"))
-            return
-
-        self._set_json(404)
-        self.wfile.write(json.dumps({"error": "not_found"}).encode("utf-8"))
+                data = json.dumps(event)
+                self.wfile.write(f"event: {event['type']}\n".encode("utf-8"))
+                self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                self.wfile.flush()
+                quiet_until = time.time() + 15
+        except BrokenPipeError:
+            pass
+        finally:
+            self.server.app.hub().unsubscribe(subscriber)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=17890)
+class BridgeHTTPServer(ThreadingHTTPServer):
+    def __init__(self, server_address: tuple[str, int], app: BridgeApp) -> None:
+        super().__init__(server_address, BridgeHTTPRequestHandler)
+        self.app = app
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Codex bridge helper")
     parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=17890)
+    parser.add_argument("--spawn-cli", action="store_true", help="spawn codex app-server subprocess")
     args = parser.parse_args()
 
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"[bridge] listening on http://{args.host}:{args.port}")
+    app = BridgeApp(spawn_cli=args.spawn_cli)
+    server = BridgeHTTPServer((args.host, args.port), app)
+
+    LOGGER.info("listening on http://%s:%s", args.host, args.port)
+
+    def _shutdown(signum: int, _frame: Any) -> None:  # noqa: D401
+        LOGGER.info("received signal %s; shutting down", signum)
+        server.shutdown()
+        app.shutdown()
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
     try:
         server.serve_forever()
-    except KeyboardInterrupt:
-        pass
     finally:
-        server.server_close()
+        app.shutdown()
 
 
 if __name__ == "__main__":
